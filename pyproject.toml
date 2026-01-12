@@ -1,0 +1,29 @@
+[project]
+name = "siphon-workspace"
+version = "0.0.0"
+description = "Siphon monorepo workspace"
+requires-python = ">=3.10"
+
+[tool.uv.workspace]
+members = ["libs/*"]
+
+[tool.uv.sources]
+siphon-dsl = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pyyaml>=6.0",
+    "ruff>=0.4",
+    "siphon-dsl",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
