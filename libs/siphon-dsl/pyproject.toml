@@ -23,6 +23,7 @@ dependencies = []
 
 [project.optional-dependencies]
 http = ["requests>=2.28"]
+typed = ["pydantic>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/alpeshvas/siphon"
