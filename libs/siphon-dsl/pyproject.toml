@@ -25,8 +25,8 @@ dependencies = []
 http = ["requests>=2.28"]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/siphon"
-Repository = "https://github.com/yourusername/siphon"
+Homepage = "https://github.com/alpeshvas/siphon"
+Repository = "https://github.com/alpeshvas/siphon"
 
 [build-system]
 requires = ["hatchling"]
