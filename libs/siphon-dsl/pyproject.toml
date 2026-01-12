@@ -2,7 +2,7 @@
 name = "siphon-dsl"
 version = "0.4.0"
 description = "Minimal DSL for API data extraction"
-readme = "../../README.md"
+readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
