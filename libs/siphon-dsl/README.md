@@ -104,6 +104,30 @@ Requires `requests`:
 pip install siphon-dsl[http]
 ```
 
+## Typed Specs (Pydantic)
+```python
+from siphon.typed import process_spec, ExtractSpec, FieldSpec
+
+spec = ExtractSpec(
+    extract={
+        "id": "$.data.id",
+        "active_items": FieldSpec(
+            path="$.data.items[*]",
+            where={"status": "active"},
+            select={"item_id": "id", "name": "name"},
+            collect=True,
+        ),
+    }
+)
+
+result = process_spec(spec, data)
+```
+
+Requires `pydantic`:
+```bash
+pip install siphon-dsl[typed]
+```
+
 ## Why Siphon?
 
 - **Minimal** — ~100 lines of code, no dependencies
