@@ -1,6 +1,5 @@
 import pytest
 from pydantic import ValidationError
-
 from siphon.typed import ExtractSpec, FieldSpec, RequestSpec, process_spec
 
 
