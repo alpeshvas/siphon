@@ -43,20 +43,32 @@ def get_by_path(obj, path: str):
     return obj
 
 
-def extract_array_with_path(data: dict, path: str) -> tuple[list | None, str | None]:
-    """Returns (array, remaining_path) for paths containing [*]."""
-    if "[*]" not in path:
-        return None, path
+def extract_all(data, path: str) -> list:
+    """Extract all values from path, handling multiple [*] recursively.
 
+    Returns list of (item, value) tuples where item is the innermost array element
+    (for where/select filtering) and value is the extracted value.
+    """
     if path.startswith("$."):
         path = path[2:]
+
+    if "[*]" not in path:
+        return [(data, get_by_path(data, path) if path else data)]
 
     before, after = path.split("[*]", 1)
     before = before.rstrip(".")
     after = after.lstrip(".")
 
     array = get_by_path(data, before) if before else data
-    return array, after if after else None
+    if not array or not isinstance(array, list):
+        return []
+
+    results = []
+    for item in array:
+        for sub_item, value in extract_all(item, after):
+            # Keep innermost array item for where/select, unless we're still descending
+            results.append((sub_item if sub_item is not item else item, value))
+    return results
 
 
 def matches(item: dict, where: dict) -> bool:
@@ -71,16 +83,12 @@ def project(item: dict, select: dict) -> dict:
 
 class Extractor:
     def extract(self, spec: FieldSpec, data: dict) -> Any:
-        array, remaining = extract_array_with_path(data, spec.path)
-
-        # Simple path, no array
-        if array is None:
+        # Simple path, no array iteration
+        if "[*]" not in spec.path:
             return get_by_path(data, spec.path.lstrip("$."))
 
         results = []
-        for item in array:
-            value = get_by_path(item, remaining) if remaining else item
-
+        for item, value in extract_all(data, spec.path):
             if spec.where and not matches(item, spec.where):
                 continue
 
