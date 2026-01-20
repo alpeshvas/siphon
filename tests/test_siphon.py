@@ -281,3 +281,21 @@ class TestNestedArrays:
         result = process(spec, nested_array_data)
         assert len(result["all_passengers"]) == 5
         assert result["all_passengers"][0] == {"pricingCategoryId": 1, "price": 50}
+
+    def test_nested_collect_with_select_projection(self, nested_array_data):
+        """Collect nested items with field projection."""
+        spec = {
+            "extract": {
+                "rate_names": {
+                    "path": "$.pricesByDateRange[*].rates[*]",
+                    "select": {"id": "rateId", "label": "name"},
+                    "collect": True,
+                }
+            }
+        }
+        result = process(spec, nested_array_data)
+        assert result["rate_names"] == [
+            {"id": 100, "label": "Standard"},
+            {"id": 200, "label": "Premium"},
+            {"id": 100, "label": "Standard"},
+        ]
