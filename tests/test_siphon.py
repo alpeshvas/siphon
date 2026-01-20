@@ -492,7 +492,7 @@ class TestBokunPriceList:
         assert result["passengers"] == [
             {
                 "pricingCategoryId": 887614,
-                "title": "Option 1: Adult without add-ons (free time in Niagara Falls)",
+                "title": "Option 1: Adult without add-ons",
                 "ticketCategory": "ADULT",
                 "amount": 67.21,
                 "currency": "EUR",
