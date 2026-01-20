@@ -169,3 +169,115 @@ class TestCombined:
             {"item_id": 1, "item_name": "Widget"},
             {"item_id": 3, "item_name": "Thing"},
         ]
+
+
+@pytest.fixture
+def nested_array_data():
+    """Data structure similar to Bokun pricing API with nested arrays."""
+    return {
+        "pricesByDateRange": [
+            {
+                "dateRange": "2024-01-01",
+                "rates": [
+                    {
+                        "rateId": 100,
+                        "name": "Standard",
+                        "passengers": [
+                            {"pricingCategoryId": 1, "price": 50},
+                            {"pricingCategoryId": 2, "price": 25},
+                        ],
+                    },
+                    {
+                        "rateId": 200,
+                        "name": "Premium",
+                        "passengers": [
+                            {"pricingCategoryId": 1, "price": 75},
+                            {"pricingCategoryId": 2, "price": 40},
+                        ],
+                    },
+                ],
+            },
+            {
+                "dateRange": "2024-01-02",
+                "rates": [
+                    {
+                        "rateId": 100,
+                        "name": "Standard",
+                        "passengers": [
+                            {"pricingCategoryId": 1, "price": 55},
+                        ],
+                    },
+                ],
+            },
+        ]
+    }
+
+
+class TestNestedArrays:
+    def test_double_nested_array_first(self, nested_array_data):
+        """Extract first passenger from nested rates."""
+        spec = {
+            "extract": {"first_passenger": "$.pricesByDateRange[*].rates[*].passengers[*].price"}
+        }
+        result = process(spec, nested_array_data)
+        assert result["first_passenger"] == 50
+
+    def test_double_nested_array_collect(self, nested_array_data):
+        """Collect all passengers from all rates."""
+        spec = {
+            "extract": {
+                "all_prices": {
+                    "path": "$.pricesByDateRange[*].rates[*].passengers[*].price",
+                    "collect": True,
+                }
+            }
+        }
+        result = process(spec, nested_array_data)
+        assert result["all_prices"] == [50, 25, 75, 40, 55]
+
+    def test_nested_with_where_at_rate_level(self, nested_array_data):
+        """Filter rates by rateId, extract passengers from matching rate."""
+        spec = {
+            "extract": {
+                "premium_rate": {
+                    "path": "$.pricesByDateRange[*].rates[*]",
+                    "where": {"rateId": 200},
+                    "select": {"name": "name", "passengers": "passengers"},
+                }
+            }
+        }
+        result = process(spec, nested_array_data)
+        assert result["premium_rate"]["name"] == "Premium"
+        assert result["premium_rate"]["passengers"] == [
+            {"pricingCategoryId": 1, "price": 75},
+            {"pricingCategoryId": 2, "price": 40},
+        ]
+
+    def test_nested_with_where_on_innermost_level(self, nested_array_data):
+        """Filter by pricingCategoryId at innermost level."""
+        spec = {
+            "extract": {
+                "adult_prices": {
+                    "path": "$.pricesByDateRange[*].rates[*].passengers[*]",
+                    "where": {"pricingCategoryId": 1},
+                    "select": {"price": "price"},
+                    "collect": True,
+                }
+            }
+        }
+        result = process(spec, nested_array_data)
+        assert result["adult_prices"] == [{"price": 50}, {"price": 75}, {"price": 55}]
+
+    def test_triple_nested_collect_objects(self, nested_array_data):
+        """Collect full passenger objects from triple nested arrays."""
+        spec = {
+            "extract": {
+                "all_passengers": {
+                    "path": "$.pricesByDateRange[*].rates[*].passengers[*]",
+                    "collect": True,
+                }
+            }
+        }
+        result = process(spec, nested_array_data)
+        assert len(result["all_passengers"]) == 5
+        assert result["all_passengers"][0] == {"pricingCategoryId": 1, "price": 50}

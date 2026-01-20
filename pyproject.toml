@@ -1,6 +1,6 @@
 [project]
 name = "siphon-workspace"
-version = "0.0.0"
+version = "0.4.2"
 description = "Siphon monorepo workspace"
 requires-python = ">=3.10"
 
