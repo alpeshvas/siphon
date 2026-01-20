@@ -299,3 +299,209 @@ class TestNestedArrays:
             {"id": 200, "label": "Premium"},
             {"id": 100, "label": "Standard"},
         ]
+
+    def test_filter_by_ancestor_property(self, nested_array_data):
+        """Filter passengers by rateId from parent rate (ancestor filtering)."""
+        spec = {
+            "extract": {
+                "premium_passengers": {
+                    "path": "$.pricesByDateRange[*].rates[*].passengers[*]",
+                    "where": {"rateId": 200},
+                    "select": {"category": "pricingCategoryId", "amount": "price"},
+                    "collect": True,
+                }
+            }
+        }
+        result = process(spec, nested_array_data)
+        # Should return only passengers from rate 200 (Premium)
+        assert result["premium_passengers"] == [
+            {"category": 1, "amount": 75},
+            {"category": 2, "amount": 40},
+        ]
+
+    def test_filter_by_multiple_ancestor_levels(self, nested_array_data):
+        """Filter passengers by properties from multiple ancestor levels."""
+        spec = {
+            "extract": {
+                "specific_passengers": {
+                    "path": "$.pricesByDateRange[*].rates[*].passengers[*]",
+                    "where": {"dateRange": "2024-01-01", "rateId": 100},
+                    "select": {"category": "pricingCategoryId", "amount": "price"},
+                    "collect": True,
+                }
+            }
+        }
+        result = process(spec, nested_array_data)
+        # Should return passengers from rate 100 on date 2024-01-01 only
+        assert result["specific_passengers"] == [
+            {"category": 1, "amount": 50},
+            {"category": 2, "amount": 25},
+        ]
+
+
+@pytest.fixture
+def bokun_price_list_data():
+    """Data structure matching Bokun /activity.json/<activityId>/price-list endpoint."""
+    return {
+        "activityId": 814165,
+        "isPriceConverted": True,
+        "conversionRate": 0.62,
+        "defaultCurrency": "CAD",
+        "pricesByDateRange": [
+            {
+                "from": "2026-01-20",
+                "to": "2027-01-20",
+                "rates": [
+                    {
+                        "rateId": 1565415,
+                        "title": "All Inclusive Package",
+                        "passengers": [
+                            {
+                                "pricingCategoryId": 789585,
+                                "title": "Option 3: Adult with all add-ons",
+                                "ticketCategory": "ADULT",
+                                "price": {
+                                    "currency": "EUR",
+                                    "amount": 184.35,
+                                    "ofWhichTax": 0.0,
+                                    "converted": True,
+                                    "conversionRate": 0.62,
+                                    "inferred": True,
+                                },
+                                "tieredPrices": [],
+                                "extras": [],
+                            },
+                            {
+                                "pricingCategoryId": 789586,
+                                "title": "Option 3: Child + all options",
+                                "ticketCategory": "CHILD",
+                                "price": {
+                                    "currency": "EUR",
+                                    "amount": 159.69,
+                                    "ofWhichTax": 0.0,
+                                    "converted": True,
+                                    "conversionRate": 0.62,
+                                    "inferred": True,
+                                },
+                                "tieredPrices": [],
+                                "extras": [],
+                            },
+                        ],
+                        "extras": [],
+                    },
+                    {
+                        "rateId": 1760309,
+                        "title": "Standard Tour: No Add-ons",
+                        "passengers": [
+                            {
+                                "pricingCategoryId": 887614,
+                                "title": "Option 1: Adult without add-ons",
+                                "ticketCategory": "ADULT",
+                                "price": {
+                                    "currency": "EUR",
+                                    "amount": 67.21,
+                                    "ofWhichTax": 0.0,
+                                    "converted": True,
+                                    "conversionRate": 0.62,
+                                    "inferred": True,
+                                },
+                                "tieredPrices": [],
+                                "extras": [],
+                            },
+                            {
+                                "pricingCategoryId": 887615,
+                                "title": "Option 1: Child without Add-ons",
+                                "ticketCategory": "ADULT",
+                                "price": {
+                                    "currency": "EUR",
+                                    "amount": 61.04,
+                                    "ofWhichTax": 0.0,
+                                    "converted": True,
+                                    "conversionRate": 0.62,
+                                    "inferred": True,
+                                },
+                                "tieredPrices": [],
+                                "extras": [],
+                            },
+                        ],
+                        "extras": [],
+                    },
+                    {
+                        "rateId": 1567944,
+                        "title": "Attractions Package",
+                        "passengers": [
+                            {
+                                "pricingCategoryId": 788209,
+                                "title": "Option 2: Child + both attractions",
+                                "ticketCategory": "CHILD",
+                                "price": {
+                                    "currency": "EUR",
+                                    "amount": 113.45,
+                                    "ofWhichTax": 0.0,
+                                    "converted": True,
+                                    "conversionRate": 0.62,
+                                    "inferred": True,
+                                },
+                                "tieredPrices": [],
+                                "extras": [],
+                            },
+                            {
+                                "pricingCategoryId": 788208,
+                                "title": "Option 2: Adult with attractions",
+                                "ticketCategory": "ADULT",
+                                "price": {
+                                    "currency": "EUR",
+                                    "amount": 135.03,
+                                    "ofWhichTax": 0.0,
+                                    "converted": True,
+                                    "conversionRate": 0.62,
+                                    "inferred": True,
+                                },
+                                "tieredPrices": [],
+                                "extras": [],
+                            },
+                        ],
+                        "extras": [],
+                    },
+                ],
+            }
+        ],
+    }
+
+
+class TestBokunPriceList:
+    def test_extract_passengers_by_rate_id(self, bokun_price_list_data):
+        """Real-world use case: extract passengers filtered by rateId with field projection."""
+        spec = {
+            "extract": {
+                "passengers": {
+                    "path": "$.pricesByDateRange[*].rates[*].passengers[*]",
+                    "where": {"rateId": 1760309},
+                    "select": {
+                        "pricingCategoryId": "pricingCategoryId",
+                        "title": "title",
+                        "ticketCategory": "ticketCategory",
+                        "amount": "price.amount",
+                        "currency": "price.currency",
+                    },
+                    "collect": True,
+                }
+            }
+        }
+        result = process(spec, bokun_price_list_data)
+        assert result["passengers"] == [
+            {
+                "pricingCategoryId": 887614,
+                "title": "Option 1: Adult without add-ons",
+                "ticketCategory": "ADULT",
+                "amount": 67.21,
+                "currency": "EUR",
+            },
+            {
+                "pricingCategoryId": 887615,
+                "title": "Option 1: Child without Add-ons",
+                "ticketCategory": "ADULT",
+                "amount": 61.04,
+                "currency": "EUR",
+            },
+        ]

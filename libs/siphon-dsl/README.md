@@ -62,6 +62,7 @@ Output:
 | **Simple paths** | `$.data.id` | Extract nested values |
 | **Array iteration** | `$.items[*].name` | Traverse arrays |
 | **Filtering** | `where: {status: "active"}` | Filter by field values |
+| **Ancestor filtering** | `where: {parentId: 123}` | Filter by parent-level properties |
 | **Projection** | `select: {new: "old"}` | Rename and reshape fields |
 | **Collect** | `collect: true` | Return all matches (default: first only) |
 

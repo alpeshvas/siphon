@@ -5,6 +5,7 @@ Supports:
 - Simple JSONPath extraction: "$.data.id"
 - Array iteration with [*]
 - Filtering with `where` (returns first match by default)
+- Ancestor filtering: `where` can match properties from any parent level
 - Field projection/renaming with `select`
 - Collect all matches with `collect: true`
 """
@@ -12,7 +13,7 @@ Supports:
 from dataclasses import dataclass
 from typing import Any
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 
 @dataclass
@@ -43,17 +44,22 @@ def get_by_path(obj, path: str):
     return obj
 
 
-def extract_all(data, path: str) -> list:
+def extract_all(data, path: str, context: dict | None = None) -> list:
     """Extract all values from path, handling multiple [*] recursively.
 
-    Returns list of (item, value) tuples where item is the innermost array element
-    (for where/select filtering) and value is the extracted value.
+    Returns list of (context, value) tuples where context includes
+    all ancestor array item properties for where filtering.
     """
+    context = context or {}
+
     if path.startswith("$."):
         path = path[2:]
 
     if "[*]" not in path:
-        return [(data, get_by_path(data, path) if path else data)]
+        value = get_by_path(data, path) if path else data
+        # Merge final item into context if it's a dict
+        final_context = {**context, **value} if isinstance(value, dict) else context
+        return [(final_context, value)]
 
     before, after = path.split("[*]", 1)
     before = before.rstrip(".")
@@ -65,9 +71,10 @@ def extract_all(data, path: str) -> list:
 
     results = []
     for item in array:
-        for sub_item, value in extract_all(item, after):
-            # Keep innermost array item for where/select, unless we're still descending
-            results.append((sub_item if sub_item is not item else item, value))
+        # Merge current array item into context for descendant filtering
+        merged = {**context, **item} if isinstance(item, dict) else context
+        for sub_context, value in extract_all(item, after, merged):
+            results.append((sub_context, value))
     return results
 
 
