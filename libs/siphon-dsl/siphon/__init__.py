@@ -135,4 +135,4 @@ def fetch_and_process(spec: dict, base_url: str) -> dict:
 
 
 # Import the chaining query API (v0.6.0+)
-from siphon._chain import query  # noqa: E402
+from siphon._chain import query as query  # noqa: E402

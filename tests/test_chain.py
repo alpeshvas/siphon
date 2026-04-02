@@ -37,10 +37,7 @@ class TestSingleLevel:
 
     def test_from_absolute_path_collect_true(self, flat_data):
         """Extract all items from absolute path."""
-        spec = {
-            "from": "$.items[*]",
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "collect": True}
         result = query(spec, flat_data)
         assert isinstance(result, list)
         assert len(result) == 3
@@ -48,41 +45,28 @@ class TestSingleLevel:
 
     def test_from_relative_path(self, flat_data):
         """Relative path (no $.)."""
-        spec = {
-            "from": "items[*]",
-            "collect": True
-        }
+        spec = {"from": "items[*]", "collect": True}
         result = query(spec, flat_data)
         assert isinstance(result, list)
         assert len(result) == 3
 
     def test_from_returns_first_match_by_default(self, flat_data):
         """Without collect, returns first item as dict, not list."""
-        spec = {
-            "from": "$.items[*]"
-        }
+        spec = {"from": "$.items[*]"}
         result = query(spec, flat_data)
         assert isinstance(result, dict)
         assert result["id"] == 1
 
     def test_where_equality_shorthand(self, flat_data):
         """Filter with equality shorthand."""
-        spec = {
-            "from": "$.items[*]",
-            "where": {"status": "active"},
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "where": {"status": "active"}, "collect": True}
         result = query(spec, flat_data)
         assert len(result) == 2
         assert all(item["status"] == "active" for item in result)
 
     def test_where_operator(self, flat_data):
         """Filter with operator."""
-        spec = {
-            "from": "$.items[*]",
-            "where": {"id": {"$gt": 1}},
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "where": {"id": {"$gt": 1}}, "collect": True}
         result = query(spec, flat_data)
         assert len(result) == 2
         assert all(item["id"] > 1 for item in result)
@@ -92,7 +76,7 @@ class TestSingleLevel:
         spec = {
             "from": "$.items[*]",
             "where": {"status": "active", "id": {"$gt": 1}},
-            "collect": True
+            "collect": True,
         }
         result = query(spec, flat_data)
         assert len(result) == 1
@@ -103,76 +87,38 @@ class TestSingleLevel:
         spec = {
             "from": "$.items[*]",
             "select": {"person_id": "id", "person_name": "name"},
-            "collect": True
+            "collect": True,
         }
         result = query(spec, flat_data)
         assert result[0] == {"person_id": 1, "person_name": "Alice"}
 
-    def test_collect_returns_all(self, flat_data):
-        """collect: true returns list of all matches."""
-        spec = {
-            "from": "$.items[*]",
-            "where": {"status": "active"},
-            "collect": True
-        }
-        result = query(spec, flat_data)
-        assert isinstance(result, list)
-        assert len(result) == 2
-
-    def test_collect_false_returns_first(self, flat_data):
-        """collect: false (default) returns first match as dict."""
-        spec = {
-            "from": "$.items[*]",
-            "where": {"status": "active"}
-        }
-        result = query(spec, flat_data)
-        assert isinstance(result, dict)
-        assert result["name"] == "Alice"
-
     def test_no_match_collect_false_returns_none(self, flat_data):
         """No match with collect: false returns None."""
-        spec = {
-            "from": "$.items[*]",
-            "where": {"status": "deleted"}
-        }
+        spec = {"from": "$.items[*]", "where": {"status": "deleted"}}
         result = query(spec, flat_data)
         assert result is None
 
     def test_no_match_collect_true_returns_empty_list(self, flat_data):
         """No match with collect: true returns empty list."""
-        spec = {
-            "from": "$.items[*]",
-            "where": {"status": "deleted"},
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "where": {"status": "deleted"}, "collect": True}
         result = query(spec, flat_data)
         assert result == []
 
     def test_select_without_collect(self, flat_data):
         """Select with collect: false returns first projected item."""
-        spec = {
-            "from": "$.items[*]",
-            "where": {"status": "active"},
-            "select": {"name": "name"}
-        }
+        spec = {"from": "$.items[*]", "where": {"status": "active"}, "select": {"name": "name"}}
         result = query(spec, flat_data)
         assert result == {"name": "Alice"}
 
     def test_from_nonexistent_path(self):
         """Nonexistent path returns None/empty."""
-        spec = {
-            "from": "$.nonexistent[*]",
-            "collect": True
-        }
+        spec = {"from": "$.nonexistent[*]", "collect": True}
         result = query(spec, {"items": []})
         assert result == []
 
     def test_from_path_not_array(self):
         """Path that doesn't resolve to array returns empty."""
-        spec = {
-            "from": "$.notanarray[*]",
-            "collect": True
-        }
+        spec = {"from": "$.notanarray[*]", "collect": True}
         result = query(spec, {"notanarray": "just a string"})
         assert result == []
 
@@ -228,7 +174,7 @@ class TestThenChaining:
             "from": "$.pricesByDateRange[*].rates[*]",
             "where": {"rateId": 200},
             "select": {"rate_id": "rateId", "rate_name": "name"},
-            "collect": True
+            "collect": True,
         }
         result = query(spec, nested_data)
         assert isinstance(result, list)
@@ -245,8 +191,8 @@ class TestThenChaining:
                 "from": "rates[*]",
                 "where": {"rateId": 200},
                 "select": {"rate_id": "rateId"},
-                "collect": True
-            }
+                "collect": True,
+            },
         }
         result = query(spec, nested_data)
         assert isinstance(result, list)
@@ -264,8 +210,8 @@ class TestThenChaining:
                 "from": "rates[*]",
                 "where": {"rateId": 200},
                 "select": {"rate_id": "rateId"},
-                "collect": True
-            }
+                "collect": True,
+            },
         }
         result = query(spec, nested_data)
         assert isinstance(result, list)
@@ -283,8 +229,8 @@ class TestThenChaining:
                 "from": "rates[*]",
                 "where": {"rateId": 200},
                 "select": {"id": "rateId"},  # id = rateId from child
-                "collect": True
-            }
+                "collect": True,
+            },
         }
         result = query(spec, nested_data)
         assert isinstance(result, list)
@@ -300,12 +246,8 @@ class TestThenChaining:
                 "from": "rates[*]",
                 "where": {"rateId": 200},
                 "select": {"rate_id": "rateId"},
-                "then": {
-                    "from": "passengers[*]",
-                    "select": {"price": "price"},
-                    "collect": True
-                }
-            }
+                "then": {"from": "passengers[*]", "select": {"price": "price"}, "collect": True},
+            },
         }
         result = query(spec, nested_data)
         assert isinstance(result, list)
@@ -322,8 +264,8 @@ class TestThenChaining:
             "then": {
                 "from": "passengers[*]",  # This still resolves against original "passengers" key
                 "select": {"price": "price"},
-                "collect": True
-            }
+                "collect": True,
+            },
         }
         result = query(spec, nested_data)
         # Should get passengers even though name was projected
@@ -335,11 +277,7 @@ class TestThenChaining:
         spec = {
             "from": "$.pricesByDateRange[*]",
             "where": {"dateRange": "2024-01-01"},
-            "then": {
-                "from": "rates[*]",
-                "select": {"rate_id": "rateId"},
-                "collect": True
-            }
+            "then": {"from": "rates[*]", "select": {"rate_id": "rateId"}, "collect": True},
         }
         result = query(spec, nested_data)
         assert isinstance(result, list)
@@ -357,8 +295,8 @@ class TestThenChaining:
                 "from": "rates[*]",
                 "where": {"rateId": 200},
                 "select": {"rate_id": "rateId"},
-                "collect": True
-            }
+                "collect": True,
+            },
         }
         result = query(spec, nested_data)
         assert len(result) == 1
@@ -373,8 +311,8 @@ class TestThenChaining:
                 "from": "rates[*]",
                 "select": {"rate_id": "rateId"},
                 "sort": [{"field": "rateId", "order": "desc"}],
-                "collect": True
-            }
+                "collect": True,
+            },
         }
         result = query(spec, nested_data)
         # Should be sorted descending by rateId within each dateRange
@@ -389,7 +327,7 @@ class TestSort:
         spec = {
             "from": "$.products[*]",
             "sort": [{"field": "price", "order": "asc"}],
-            "collect": True
+            "collect": True,
         }
         result = query(spec, prices)
         assert result[0]["price"] == 50
@@ -401,7 +339,7 @@ class TestSort:
         spec = {
             "from": "$.products[*]",
             "sort": [{"field": "price", "order": "desc"}],
-            "collect": True
+            "collect": True,
         }
         result = query(spec, prices)
         assert result[0]["price"] == 150
@@ -419,11 +357,8 @@ class TestSort:
         }
         spec = {
             "from": "$.items[*]",
-            "sort": [
-                {"field": "category", "order": "asc"},
-                {"field": "value", "order": "asc"}
-            ],
-            "collect": True
+            "sort": [{"field": "category", "order": "asc"}, {"field": "value", "order": "asc"}],
+            "collect": True,
         }
         result = query(spec, data)
         assert result[0] == {"category": "A", "value": 1}
@@ -439,11 +374,7 @@ class TestSort:
                 {"id": 3, "value": 30},
             ]
         }
-        spec = {
-            "from": "$.items[*]",
-            "sort": [{"field": "value", "order": "asc"}],
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "sort": [{"field": "value", "order": "asc"}], "collect": True}
         result = query(spec, data)
         assert result[0]["value"] == 30
         assert result[1]["value"] == 50
@@ -461,7 +392,7 @@ class TestSort:
         spec = {
             "from": "$.items[*]",
             "sort": [{"field": "value", "order": "desc"}],
-            "collect": True
+            "collect": True,
         }
         result = query(spec, data)
         assert result[0]["value"] == 50
@@ -474,54 +405,33 @@ class TestLimitOffset:
 
     def test_limit_restricts_results(self, flat_data):
         """Limit returns only first N items."""
-        spec = {
-            "from": "$.items[*]",
-            "limit": 2,
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "limit": 2, "collect": True}
         result = query(spec, flat_data)
         assert len(result) == 2
 
     def test_offset_skips_results(self, flat_data):
         """Offset skips first N items."""
-        spec = {
-            "from": "$.items[*]",
-            "offset": 1,
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "offset": 1, "collect": True}
         result = query(spec, flat_data)
         assert len(result) == 2
         assert result[0]["id"] == 2
 
     def test_limit_and_offset_combined(self, flat_data):
         """Offset + limit returns a window."""
-        spec = {
-            "from": "$.items[*]",
-            "offset": 1,
-            "limit": 1,
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "offset": 1, "limit": 1, "collect": True}
         result = query(spec, flat_data)
         assert len(result) == 1
         assert result[0]["id"] == 2
 
     def test_offset_beyond_length(self, flat_data):
         """Offset beyond available items returns empty."""
-        spec = {
-            "from": "$.items[*]",
-            "offset": 100,
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "offset": 100, "collect": True}
         result = query(spec, flat_data)
         assert result == []
 
     def test_limit_larger_than_available(self, flat_data):
         """Limit larger than available returns all remaining."""
-        spec = {
-            "from": "$.items[*]",
-            "limit": 100,
-            "collect": True
-        }
+        spec = {"from": "$.items[*]", "limit": 100, "collect": True}
         result = query(spec, flat_data)
         assert len(result) == 3
 
@@ -531,7 +441,7 @@ class TestLimitOffset:
             "from": "$.products[*]",
             "sort": [{"field": "price", "order": "asc"}],
             "limit": 2,
-            "collect": True
+            "collect": True,
         }
         result = query(spec, prices)
         assert len(result) == 2
@@ -545,7 +455,7 @@ class TestLimitOffset:
             "sort": [{"field": "price", "order": "asc"}],
             "offset": 1,
             "limit": 1,
-            "collect": True
+            "collect": True,
         }
         result = query(spec, prices)
         assert len(result) == 1
