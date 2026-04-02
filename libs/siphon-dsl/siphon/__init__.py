@@ -1,19 +1,26 @@
 """
 Siphon - Minimal DSL for API Data Extraction
 
-Supports:
+Supports (legacy flat API):
 - Simple JSONPath extraction: "$.data.id"
 - Array iteration with [*]
 - Filtering with `where` (returns first match by default)
 - Ancestor filtering: `where` can match properties from any parent level
 - Field projection/renaming with `select`
 - Collect all matches with `collect: true`
+
+Supports (chaining API v0.6.0+):
+- Hierarchical multi-level extraction with "then" chaining
+- MongoDB-style filter operators: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists, $regex
+- Logical operators: $and, $or, $not, $nor
+- Sort, limit, offset at each level
+- Field carry-forward from parent levels
 """
 
 from dataclasses import dataclass
 from typing import Any
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 
 @dataclass
@@ -125,3 +132,7 @@ def fetch_and_process(spec: dict, base_url: str) -> dict:
     url = base_url + spec["request"]["path"]
     data = requests.get(url).json()
     return process(spec, data)
+
+
+# Import the chaining query API (v0.6.0+)
+from siphon._chain import query as query  # noqa: E402

@@ -22,9 +22,9 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FieldSpec(BaseModel):
@@ -83,3 +83,77 @@ def fetch_and_process_spec(spec: ExtractSpec, base_url: str) -> dict:
     from siphon import fetch_and_process
 
     return fetch_and_process(spec.model_dump(exclude_none=True), base_url)
+
+
+# Chaining query interface (v0.6.0+)
+
+
+class SortSpec(BaseModel):
+    """Sort specification for a chain level."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    """Field name to sort by (dot-notation for nested fields)"""
+
+    order: Literal["asc", "desc"] = "asc"
+    """Sort order: ascending or descending"""
+
+
+class ChainSpec(BaseModel):
+    """Specification for hierarchical data extraction with chaining."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    from_: str = Field(alias="from")
+    """JSONPath or relative path to the array to iterate: e.g., '$.items[*]' or 'rates[*]'"""
+
+    where: dict[str, Any] | None = None
+    """MongoDB-style filter conditions for matching items at this level"""
+
+    select: dict[str, str] | None = None
+    """Field projection/renaming: {output_name: source_path}"""
+
+    sort: list[SortSpec] | None = None
+    """Sort specifications for items at this level (before then recursion)"""
+
+    limit: int | None = None
+    """Maximum number of items to return from this level"""
+
+    offset: int | None = None
+    """Number of items to skip at this level"""
+
+    collect: bool = False
+    """If True, return all matched items as a list. If False, return first item only."""
+
+    then: ChainSpec | None = None
+    """Nested chain specification to recurse into for each matched item"""
+
+
+# Rebuild self-referential model
+ChainSpec.model_rebuild()
+
+
+def query_typed(chain_spec: ChainSpec, data: dict) -> list | dict | None:
+    """
+    Execute a typed chain query spec against data.
+
+    Args:
+        chain_spec: ChainSpec model instance
+        data: the JSON/dict data to query
+
+    Returns:
+        Extracted data matching the spec (list, dict, or None)
+
+    Example:
+        >>> spec = ChainSpec(
+        ...     from_="$.items[*]",
+        ...     where={"status": "active"},
+        ...     select={"id": "item_id"},
+        ...     collect=True
+        ... )
+        >>> result = query_typed(spec, data)
+    """
+    from siphon._chain import query
+
+    return query(chain_spec.model_dump(by_alias=True, exclude_none=True), data)
