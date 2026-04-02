@@ -46,10 +46,10 @@ def eval_condition(value: Any, condition: Any) -> bool:
             result = value is not None and value <= operand
 
         elif op == "$in":
-            result = value in operand
+            result = value is not None and operand is not None and value in operand
 
         elif op == "$nin":
-            result = value not in operand
+            result = value is None or operand is None or value not in operand
 
         elif op == "$exists":
             result = (value is not None) == operand
@@ -109,10 +109,7 @@ def eval_filter(where: dict[str, Any] | None, item: dict) -> bool:
     return True
 
 
-def sort_items(
-    items: list[dict],
-    sort_specs: list[dict[str, Any]] | None
-) -> list[dict]:
+def sort_items(items: list[dict], sort_specs: list[dict[str, Any]] | None) -> list[dict]:
     """
     Sort items by multiple sort specs (stable sort).
 
@@ -135,11 +132,7 @@ def sort_items(
         non_nones = [x for x in result if get_by_path(x, field) is not None]
 
         # Sort non-None items
-        non_nones = sorted(
-            non_nones,
-            key=lambda x: get_by_path(x, field),
-            reverse=is_desc
-        )
+        non_nones = sorted(non_nones, key=lambda x: get_by_path(x, field), reverse=is_desc)
 
         # Combine: sorted non-Nones + Nones at the end
         result = non_nones + nones
@@ -176,7 +169,8 @@ def resolve_from(from_path: str | None, data: Any) -> list:
 def execute_chain(
     spec: dict[str, Any],
     data: Any,
-    carry_context: dict[str, Any] | None = None
+    carry_context: dict[str, Any] | None = None,
+    root_data: Any | None = None,
 ) -> list | dict | None:
     """
     Execute a chain spec recursively against data.
@@ -185,6 +179,8 @@ def execute_chain(
     - At terminal level: list if collect=true, first item if collect=false, None if no match
     - At intermediate level: always a list (caller flattens)
     """
+    if root_data is None:
+        root_data = data
     if carry_context is None:
         carry_context = {}
 
@@ -241,7 +237,7 @@ def execute_chain(
             # Build carry context
             child_carry = {**carry_context, **contribution}
             # Recurse (then always operates on original item)
-            child_results = execute_chain(spec["then"], item, child_carry)
+            child_results = execute_chain(spec["then"], item, child_carry, root_data)
 
             # Flatten results
             if isinstance(child_results, list):
@@ -279,7 +275,7 @@ def decompose_multi_star(spec: dict[str, Any]) -> dict[str, Any]:
     # Find the first [*]
     idx = from_path.index("[*]")
     before = from_path[:idx]
-    after = from_path[idx + 3:]  # Skip "[*]"
+    after = from_path[idx + 3 :]  # Skip "[*]"
 
     # The outer "from" is everything up to and including the first [*]
     outer_from = before + "[*]"
@@ -290,7 +286,7 @@ def decompose_multi_star(spec: dict[str, Any]) -> dict[str, Any]:
 
     inner_spec = {
         "from": inner_from,
-        **{k: v for k, v in spec.items() if k not in ("from", "then")}
+        **{k: v for k, v in spec.items() if k not in ("from", "then")},
     }
 
     # If the inner spec's from still has [*], recurse
@@ -305,10 +301,7 @@ def decompose_multi_star(spec: dict[str, Any]) -> dict[str, Any]:
             current = current["then"]
         current["then"] = spec["then"]
 
-    return {
-        "from": outer_from,
-        "then": inner_spec
-    }
+    return {"from": outer_from, "then": inner_spec}
 
 
 def query(chain_spec: dict[str, Any], data: Any) -> list | dict | None:
@@ -325,4 +318,73 @@ def query(chain_spec: dict[str, Any], data: Any) -> list | dict | None:
     """
     # Decompose multi-star paths into nested specs
     chain_spec = decompose_multi_star(chain_spec)
-    return execute_chain(chain_spec, data)
+    return execute_chain(chain_spec, data, root_data=data)
+
+
+# Pipeline support (v0.7.0+)
+
+_STAGE_REF = re.compile(r"^\$stages\.(\w+)\.(.+)$")
+
+
+def resolve_ref(value: str, ctx: dict[str, Any]) -> Any:
+    """Resolve a single $stages.<id>.<field> reference."""
+    m = _STAGE_REF.match(value)
+    if not m:
+        return value
+    stage_id, field = m.group(1), m.group(2)
+    if stage_id not in ctx:
+        raise ValueError(f"Unknown stage: {stage_id}")
+    output = ctx[stage_id]
+    if isinstance(output, list):
+        return [get_by_path(item, field) for item in output if isinstance(item, dict)]
+    elif isinstance(output, dict):
+        return get_by_path(output, field)
+    return None
+
+
+def resolve_refs(obj: Any, ctx: dict[str, Any]) -> Any:
+    """Recursively resolve $stages references in a where dict."""
+    if not ctx:
+        return obj
+    if isinstance(obj, str) and obj.startswith("$stages."):
+        return resolve_ref(obj, ctx)
+    if isinstance(obj, dict):
+        return {k: resolve_refs(v, ctx) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [resolve_refs(v, ctx) for v in obj]
+    return obj
+
+
+def pipeline(stages: list[dict[str, Any]], data: Any) -> list | dict | None:
+    """
+    Execute a sequence of named stages, GitHub Actions-style.
+
+    Each stage's `from` resolves against the original root data.
+    Stages reference prior outputs via $stages.<id>.<field> in where clauses.
+
+    Args:
+        stages: list of chain spec dicts, each optionally with an "id" key
+        data: the root JSON/dict data all stages resolve against
+
+    Returns:
+        The last stage's output (list, dict, or None)
+    """
+    stages_context: dict[str, Any] = {}
+    result = None
+
+    for stage in stages:
+        stage_id = stage.get("id")
+
+        # Build resolved stage: resolve $stages refs in where, strip id
+        resolved_where = resolve_refs(stage.get("where"), stages_context)
+        resolved_stage = {k: v for k, v in stage.items() if k != "id"}
+        if resolved_where is not None:
+            resolved_stage["where"] = resolved_where
+
+        # Delegate to query() (handles decompose_multi_star + execute_chain)
+        result = query(resolved_stage, data)
+
+        if stage_id is not None:
+            stages_context[stage_id] = result
+
+    return result

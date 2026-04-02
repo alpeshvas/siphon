@@ -241,3 +241,84 @@ class TestChainSpecValidation:
         spec = ChainSpec(from_="$.items[*]", offset=10, limit=20)
         assert spec.offset == 10
         assert spec.limit == 20
+
+    def test_id_field_optional(self):
+        """id defaults to None and is optional."""
+        spec = ChainSpec(from_="$.items[*]")
+        assert spec.id is None
+
+    def test_id_field_accepted(self):
+        """id can be set for pipeline stage references."""
+        spec = ChainSpec(from_="$.items[*]", id="my_stage")
+        assert spec.id == "my_stage"
+
+    def test_id_excluded_from_dump_when_none(self):
+        """id is excluded from model dump when None."""
+        spec = ChainSpec(from_="$.items[*]")
+        dumped = spec.model_dump(by_alias=True, exclude_none=True)
+        assert "id" not in dumped
+
+    def test_id_included_in_dump_when_set(self):
+        """id is included in model dump when set."""
+        spec = ChainSpec(from_="$.items[*]", id="rate")
+        dumped = spec.model_dump(by_alias=True, exclude_none=True)
+        assert dumped["id"] == "rate"
+
+
+class TestPipelineTyped:
+    """Test PipelineSpec model and pipeline_typed function."""
+
+    def test_pipeline_spec_validates(self):
+        """PipelineSpec validates list of ChainSpec stages."""
+        from siphon.typed import PipelineSpec
+
+        spec = PipelineSpec(
+            stages=[
+                ChainSpec(from_="$.items[*]", id="step1", collect=True),
+                ChainSpec(from_="$.other[*]", collect=True),
+            ]
+        )
+        assert len(spec.stages) == 2
+        assert spec.stages[0].id == "step1"
+
+    def test_pipeline_typed_matches_untyped(self):
+        """Typed pipeline produces same results as untyped."""
+        from siphon._chain import pipeline
+        from siphon.typed import PipelineSpec, pipeline_typed
+
+        data = {
+            "rates": [
+                {"id": 1, "title": "Standard", "startTimeIds": [10, 20]},
+                {"id": 2, "title": "Premium", "startTimeIds": [20, 30]},
+            ],
+            "startTimes": [
+                {"id": 10, "hour": 9, "minute": 0},
+                {"id": 20, "hour": 12, "minute": 30},
+                {"id": 30, "hour": 15, "minute": 0},
+            ],
+        }
+
+        spec = PipelineSpec(
+            stages=[
+                ChainSpec(
+                    from_="$.rates[*]",
+                    id="rate",
+                    where={"id": 1},
+                    select={"startTimeIds": "startTimeIds"},
+                ),
+                ChainSpec(
+                    from_="$.startTimes[*]",
+                    where={"id": {"$in": "$stages.rate.startTimeIds"}},
+                    collect=True,
+                    select={"hour": "hour"},
+                ),
+            ]
+        )
+
+        typed_result = pipeline_typed(spec, data)
+
+        untyped_stages = [s.model_dump(by_alias=True, exclude_none=True) for s in spec.stages]
+        untyped_result = pipeline(untyped_stages, data)
+
+        assert typed_result == untyped_result
+        assert typed_result == [{"hour": 9}, {"hour": 12}]

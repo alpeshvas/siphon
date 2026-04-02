@@ -105,6 +105,9 @@ class ChainSpec(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
+    id: str | None = None
+    """Optional stage identifier for pipeline $stages references (ignored by query)"""
+
     from_: str = Field(alias="from")
     """JSONPath or relative path to the array to iterate: e.g., '$.items[*]' or 'rates[*]'"""
 
@@ -157,3 +160,31 @@ def query_typed(chain_spec: ChainSpec, data: dict) -> list | dict | None:
     from siphon._chain import query
 
     return query(chain_spec.model_dump(by_alias=True, exclude_none=True), data)
+
+
+class PipelineSpec(BaseModel):
+    """Specification for a multi-stage pipeline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stages: list[ChainSpec]
+    """Ordered list of stages. Each stage's `from` resolves against root data."""
+
+
+def pipeline_typed(spec: PipelineSpec, data: Any) -> list | dict | None:
+    """
+    Execute a typed pipeline spec against data.
+
+    Args:
+        spec: PipelineSpec model instance
+        data: the root JSON/dict data all stages resolve against
+
+    Returns:
+        The last stage's output (list, dict, or None)
+    """
+    from siphon._chain import pipeline
+
+    return pipeline(
+        [s.model_dump(by_alias=True, exclude_none=True) for s in spec.stages],
+        data,
+    )
