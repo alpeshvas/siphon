@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siphon - Extract What Matters from JSON APIs</title>
+<style>
+/* ===== CSS RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-text: #1e293b;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-primary: #0d9488;
+  --color-primary-dark: #0f766e;
+  --color-primary-light: #ccfbf1;
+  --color-primary-bg: #f0fdfa;
+  --color-accent: #0ea5e9;
+  --color-accent-light: #e0f2fe;
+  --color-code-bg: #1e293b;
+  --color-code-text: #e2e8f0;
+  --color-highlight: #fef08a;
+  --sidebar-width: 260px;
+  --header-height: 64px;
+  --transition: 0.2s ease;
+}
+
+[data-theme="dark"] {
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-alt: #1e293b;
+  --color-border: #334155;
+  --color-text: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-primary: #2dd4bf;
+  --color-primary-dark: #14b8a6;
+  --color-primary-light: #042f2e;
+  --color-primary-bg: #042f2e;
+  --color-accent: #38bdf8;
+  --color-accent-light: #0c4a6e;
+  --color-code-bg: #0f172a;
+  --color-code-text: #e2e8f0;
+  --color-highlight: #854d0e;
+}
+
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-height) + 16px); }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.7;
+  transition: background var(--transition), color var(--transition);
+}
+
+/* ===== HEADER ===== */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-height);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  z-index: 100;
+  transition: background var(--transition), border var(--transition);
+}
+
+.header-logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: none;
+  letter-spacing: -0.025em;
+}
+
+.header-logo span {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+  margin-left: 8px;
+}
+
+.header-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-wrapper {
+  position: relative;
+}
+
+.search-input {
+  width: 220px;
+  padding: 6px 12px 6px 32px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.search-input:focus { border-color: var(--color-primary); }
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-muted);
+}
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.theme-toggle:hover { border-color: var(--color-primary); }
+
+.menu-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: 1.1rem;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  padding: 24px 0;
+  overflow-y: auto;
+  transition: background var(--transition), border var(--transition), transform 0.3s ease;
+  z-index: 90;
+}
+
+.sidebar-nav { list-style: none; }
+
+.sidebar-nav li { margin: 0; }
+
+.sidebar-nav a {
+  display: block;
+  padding: 8px 24px;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  border-left: 3px solid transparent;
+  transition: all var(--transition);
+}
+
+.sidebar-nav a:hover,
+.sidebar-nav a.active {
+  color: var(--color-primary);
+  background: var(--color-primary-bg);
+  border-left-color: var(--color-primary);
+}
+
+.sidebar-nav a.hidden { display: none; }
+
+.sidebar-section-label {
+  padding: 16px 24px 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+/* ===== MAIN CONTENT ===== */
+.main {
+  margin-left: var(--sidebar-width);
+  margin-top: var(--header-height);
+  min-height: calc(100vh - var(--header-height));
+}
+
+.content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 32px 80px;
+}
+
+/* ===== SECTIONS ===== */
+section { margin-bottom: 64px; }
+
+h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  letter-spacing: -0.025em;
+  color: var(--color-text);
+}
+
+h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 28px;
+  margin-bottom: 12px;
+  color: var(--color-text);
+}
+
+p { margin-bottom: 16px; color: var(--color-text-secondary); }
+
+/* ===== HERO ===== */
+.hero {
+  text-align: center;
+  padding: 56px 0 40px;
+  margin-bottom: 48px;
+}
+
+.hero-title {
+  font-size: 2.75rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--color-text);
+  margin-bottom: 12px;
+}
+
+.hero-title .accent { color: var(--color-primary); }
+
+.hero-tagline {
+  font-size: 1.2rem;
+  color: var(--color-text-secondary);
+  max-width: 520px;
+  margin: 0 auto 20px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  margin-top: 32px;
+}
+
+.hero-stat {
+  text-align: center;
+}
+
+.hero-stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.hero-stat-label {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ===== CARDS GRID ===== */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 24px;
+  transition: box-shadow var(--transition), border-color var(--transition);
+}
+
+.card:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.08);
+}
+
+.card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--color-primary-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  color: var(--color-primary);
+  font-size: 1.3rem;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--color-text);
+}
+
+.card-desc {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+/* ===== WORKFLOW DIAGRAM ===== */
+.workflow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 32px 0;
+  flex-wrap: wrap;
+}
+
+.workflow-step {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  text-align: center;
+  min-width: 160px;
+  transition: border-color var(--transition);
+}
+
+.workflow-step.highlight {
+  border-color: var(--color-primary);
+  background: var(--color-primary-bg);
+}
+
+.workflow-step-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+
+.workflow-step-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.workflow-step-sub {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+
+.workflow-arrow {
+  font-size: 1.5rem;
+  color: var(--color-primary);
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+
+/* ===== PIPELINE DIAGRAM ===== */
+.pipeline-diagram {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 32px 28px;
+  margin: 24px 0;
+  overflow-x: auto;
+}
+
+.pipeline-stage {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.pipeline-stage:last-child { margin-bottom: 0; }
+
+.pipeline-stage::before {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 40px;
+  bottom: -16px;
+  width: 2px;
+  background: var(--color-border);
+}
+
+.pipeline-stage:last-child::before { display: none; }
+
+.pipeline-stage-num {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.pipeline-stage-content {
+  flex: 1;
+  background: var(--color-surface-alt);
+  border-radius: 8px;
+  padding: 14px 18px;
+}
+
+.pipeline-stage-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-text);
+}
+
+.pipeline-stage-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.pipeline-ref-badge {
+  display: inline-block;
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-top: 6px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* ===== CODE BLOCKS ===== */
+.code-block {
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+  border-radius: 10px;
+  padding: 20px 24px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  overflow-x: auto;
+  margin: 16px 0;
+  white-space: pre;
+}
+
+.code-inline {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85em;
+}
+
+.code-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+/* ===== BEFORE/AFTER ===== */
+.before-after {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.before-after-panel {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.before-after-label {
+  padding: 8px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.before-after-label.before {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+[data-theme="dark"] .before-after-label.before {
+  background: #450a0a;
+  color: #fca5a5;
+}
+
+.before-after-label.after {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+[data-theme="dark"] .before-after-label.after {
+  background: #052e16;
+  color: #86efac;
+}
+
+/* ===== USE CASE LIST ===== */
+.use-case {
+  display: flex;
+  gap: 16px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.use-case:last-child { border-bottom: none; }
+
+.use-case-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.2rem;
+}
+
+.use-case-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--color-text);
+}
+
+.use-case-desc {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+/* ===== COLLAPSIBLE ===== */
+.collapsible {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  margin: 12px 0;
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+
+.collapsible-header {
+  width: 100%;
+  background: var(--color-surface);
+  border: none;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: left;
+  transition: background var(--transition);
+}
+
+.collapsible-header:hover { background: var(--color-surface-alt); }
+
+.collapsible-arrow {
+  transition: transform 0.2s ease;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.collapsible.open .collapsible-arrow { transform: rotate(90deg); }
+
+.collapsible-body {
+  display: none;
+  padding: 0 20px 20px;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.collapsible.open .collapsible-body { display: block; }
+
+/* ===== FAQ ===== */
+.faq-item { margin-bottom: 4px; }
+
+/* ===== GLOSSARY ===== */
+.glossary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.glossary-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+
+.glossary-term {
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+}
+
+.glossary-def {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+/* ===== FEATURE TAB ===== */
+.feature-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 0;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.feature-tab {
+  padding: 10px 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.feature-tab:hover { color: var(--color-text-secondary); }
+.feature-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.feature-panel {
+  display: none;
+  padding: 24px 0;
+}
+
+.feature-panel.active { display: block; }
+
+/* ===== HIGHLIGHT MARK ===== */
+mark.search-highlight {
+  background: var(--color-highlight);
+  color: inherit;
+  padding: 1px 2px;
+  border-radius: 2px;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.15); }
+  .main { margin-left: 0; }
+  .menu-toggle { display: block; }
+  .before-after { grid-template-columns: 1fr; }
+  .hero-title { font-size: 2rem; }
+  .hero-stats { gap: 24px; }
+  .workflow { flex-direction: column; }
+  .workflow-arrow { transform: rotate(90deg); padding: 4px 0; }
+  .search-input { width: 160px; }
+}
+
+/* ===== PRINT ===== */
+@media print {
+  .header, .sidebar, .theme-toggle, .menu-toggle, .search-wrapper { display: none !important; }
+  .main { margin-left: 0 !important; margin-top: 0 !important; }
+  .content { max-width: 100%; padding: 20px; }
+  body { background: #fff; color: #000; }
+  .card, .collapsible, .glossary-item, .pipeline-diagram { break-inside: avoid; }
+  .collapsible-body { display: block !important; }
+  section { margin-bottom: 32px; }
+  .hero { padding: 20px 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header" role="banner">
+  <button class="menu-toggle" aria-label="Toggle navigation" onclick="toggleSidebar()">&#9776;</button>
+  <a href="#hero" class="header-logo">Siphon <span>Documentation</span></a>
+  <div class="header-controls">
+    <div class="search-wrapper">
+      <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search docs..." aria-label="Search documentation">
+    </div>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">Dark</button>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<nav class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
+  <div class="sidebar-section-label">Overview</div>
+  <ul class="sidebar-nav" id="sidebarNav">
+    <li><a href="#hero" data-section="hero">Home</a></li>
+    <li><a href="#what-is-siphon" data-section="what-is-siphon">What is Siphon?</a></li>
+    <li><a href="#benefits" data-section="benefits">Key Benefits</a></li>
+    <li><a href="#how-it-works" data-section="how-it-works">How It Works</a></li>
+    <li><a href="#use-cases" data-section="use-cases">Use Cases</a></li>
+  </ul>
+  <div class="sidebar-section-label">Features</div>
+  <ul class="sidebar-nav" id="sidebarNav2">
+    <li><a href="#features" data-section="features">Feature Overview</a></li>
+    <li><a href="#pipeline-viz" data-section="pipeline-viz">Pipeline Visualization</a></li>
+  </ul>
+  <div class="sidebar-section-label">Getting Started</div>
+  <ul class="sidebar-nav" id="sidebarNav3">
+    <li><a href="#quick-start" data-section="quick-start">Quick Start</a></li>
+  </ul>
+  <div class="sidebar-section-label">Reference</div>
+  <ul class="sidebar-nav" id="sidebarNav4">
+    <li><a href="#faq" data-section="faq">FAQ</a></li>
+    <li><a href="#glossary" data-section="glossary">Glossary</a></li>
+  </ul>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="main" id="mainContent">
+<div class="content">
+
+<!-- ===== HERO ===== -->
+<section class="hero" id="hero">
+  <h1 class="hero-title">Extract what matters<br>from <span class="accent">any JSON API</span></h1>
+  <p class="hero-tagline">Siphon is a tiny, declarative toolkit that pulls exactly the data you need from complex API responses -- no custom code required.</p>
+  <span class="badge">v0.7.0 &middot; MIT License</span>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="hero-stat-value">0</div>
+      <div class="hero-stat-label">Dependencies</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-value">~200</div>
+      <div class="hero-stat-label">Lines of Code</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-value">3</div>
+      <div class="hero-stat-label">APIs</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== WHAT IS SIPHON ===== -->
+<section id="what-is-siphon">
+  <h2>What is Siphon?</h2>
+  <p>Imagine you order a 200-page report from a supplier, but you only need three numbers from page 47. Today, most teams write custom code every time they need to pull specific data from an API response. That code is brittle, hard to maintain, and impossible for non-engineers to read.</p>
+  <p><strong>Siphon replaces that throwaway code with a simple recipe.</strong> You write a short description of what data you want (called a "spec"), and Siphon extracts it for you. Think of it like a mail-merge template, but for JSON APIs instead of Word documents.</p>
+  <p>The spec is just data -- a small YAML or JSON file that anyone on the team can read, version-control, and change without touching application code. When the API response structure changes, you update the spec, not the codebase.</p>
+
+  <div style="margin-top: 24px; padding: 20px 24px; background: var(--color-primary-bg); border-radius: 10px; border-left: 4px solid var(--color-primary);">
+    <strong style="color: var(--color-primary);">The analogy:</strong>
+    <span style="color: var(--color-text-secondary);"> Just as a physical siphon draws liquid from a container through a tube, Siphon draws the exact data you need from nested JSON structures -- define the path, and let it flow.</span>
+  </div>
+</section>
+
+<!-- ===== BENEFITS ===== -->
+<section id="benefits">
+  <h2>Key Benefits</h2>
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-icon">0</div>
+      <div class="card-title">Zero Dependencies</div>
+      <div class="card-desc">The core library has no runtime dependencies at all. It adds no bloat to your stack and introduces no supply-chain risk.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">&lt;/&gt;</div>
+      <div class="card-title">Specs Are Data, Not Code</div>
+      <div class="card-desc">Extraction rules live in YAML or JSON files. Non-engineers can review and modify them. Version control tracks every change.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#9881;</div>
+      <div class="card-title">No Vendor Lock-In</div>
+      <div class="card-desc">MIT-licensed, open source, and works with any JSON API. Swap out APIs or providers without rewriting extraction logic.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#9889;</div>
+      <div class="card-title">Fast to Adopt</div>
+      <div class="card-desc">One pip install, one function call. New engineers become productive in minutes, not days. The entire library is about 200 lines.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#128270;</div>
+      <div class="card-title">Powerful Filtering</div>
+      <div class="card-desc">MongoDB-style operators let you filter, sort, paginate, and reshape data at extraction time -- no post-processing step needed.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#128279;</div>
+      <div class="card-title">Multi-Stage Pipelines</div>
+      <div class="card-desc">Chain multiple extraction stages together. Cross-reference data between stages to join sibling arrays -- like SQL joins for JSON.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== HOW IT WORKS ===== -->
+<section id="how-it-works">
+  <h2>How It Works</h2>
+  <p>Siphon sits between your data source and your application. You describe what you want; Siphon delivers it.</p>
+
+  <div class="workflow">
+    <div class="workflow-step">
+      <div class="workflow-step-label">Input</div>
+      <div class="workflow-step-title">JSON API Response</div>
+      <div class="workflow-step-sub">Complex, deeply nested data</div>
+    </div>
+    <div class="workflow-arrow" aria-hidden="true">&#8594;</div>
+    <div class="workflow-step highlight">
+      <div class="workflow-step-label">Transform</div>
+      <div class="workflow-step-title">Siphon Spec</div>
+      <div class="workflow-step-sub">Declarative extraction recipe</div>
+    </div>
+    <div class="workflow-arrow" aria-hidden="true">&#8594;</div>
+    <div class="workflow-step">
+      <div class="workflow-step-label">Output</div>
+      <div class="workflow-step-title">Clean Data</div>
+      <div class="workflow-step-sub">Exactly the fields you need</div>
+    </div>
+  </div>
+
+  <h3>Step by Step</h3>
+  <ol style="padding-left: 20px; color: var(--color-text-secondary);">
+    <li style="margin-bottom: 10px;"><strong>Define paths</strong> -- tell Siphon where your data lives using dot-notation (e.g., <span class="code-inline">$.orders[*].total</span>).</li>
+    <li style="margin-bottom: 10px;"><strong>Add filters</strong> (optional) -- narrow results with conditions like "status equals active" or "price greater than 50".</li>
+    <li style="margin-bottom: 10px;"><strong>Project fields</strong> (optional) -- rename and reshape the output so downstream systems get a clean, consistent schema.</li>
+    <li style="margin-bottom: 10px;"><strong>Call one function</strong> -- pass your spec and data to <span class="code-inline">process()</span>, <span class="code-inline">query()</span>, or <span class="code-inline">pipeline()</span>. Done.</li>
+  </ol>
+</section>
+
+<!-- ===== USE CASES ===== -->
+<section id="use-cases">
+  <h2>Use Cases</h2>
+  <p>Siphon is useful anywhere your team consumes JSON data from external or internal APIs.</p>
+
+  <div class="use-case">
+    <div class="use-case-icon">&#127760;</div>
+    <div>
+      <div class="use-case-title">Third-Party API Integrations</div>
+      <div class="use-case-desc">Normalize messy third-party API responses into clean, predictable structures for your application. When the vendor changes their response format, update the spec instead of modifying code.</div>
+    </div>
+  </div>
+
+  <div class="use-case">
+    <div class="use-case-icon">&#128202;</div>
+    <div>
+      <div class="use-case-title">Data Pipelines &amp; ETL</div>
+      <div class="use-case-desc">Extract and reshape data from API sources as the first step in your ETL pipeline. The declarative spec format makes pipeline configuration transparent and auditable.</div>
+    </div>
+  </div>
+
+  <div class="use-case">
+    <div class="use-case-icon">&#128736;</div>
+    <div>
+      <div class="use-case-title">Microservice Communication</div>
+      <div class="use-case-desc">When Service A calls Service B, use Siphon specs to document and enforce exactly which fields each service expects. Specs become living contracts between teams.</div>
+    </div>
+  </div>
+
+  <div class="use-case">
+    <div class="use-case-icon">&#129302;</div>
+    <div>
+      <div class="use-case-title">AI / LLM Tool Calls</div>
+      <div class="use-case-desc">Feed structured Siphon specs to LLM-based agents. Typed Pydantic models make it easy for AI systems to construct valid extraction specs and return well-shaped data.</div>
+    </div>
+  </div>
+
+  <div class="use-case">
+    <div class="use-case-icon">&#128203;</div>
+    <div>
+      <div class="use-case-title">Travel &amp; Booking Platforms</div>
+      <div class="use-case-desc">Siphon was born from real-world travel API work. Its ancestor-filtering and pipeline features are ideal for extracting rates, passengers, and availability from deeply nested booking APIs.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FEATURE OVERVIEW ===== -->
+<section id="features">
+  <h2>Feature Overview</h2>
+  <p>Siphon offers three progressively powerful APIs. Each builds on the one below.</p>
+
+  <div class="feature-tabs" role="tablist">
+    <button class="feature-tab active" role="tab" aria-selected="true" data-tab="process" onclick="switchTab('process')">process()</button>
+    <button class="feature-tab" role="tab" aria-selected="false" data-tab="query" onclick="switchTab('query')">query()</button>
+    <button class="feature-tab" role="tab" aria-selected="false" data-tab="pipeline" onclick="switchTab('pipeline')">pipeline()</button>
+  </div>
+
+  <!-- PROCESS TAB -->
+  <div class="feature-panel active" id="tab-process">
+    <h3>Simple Extraction</h3>
+    <p>The <span class="code-inline">process()</span> API is the quickest way to pull fields from a JSON response. Define paths, optional filters, and optional field renaming -- all in a plain dictionary.</p>
+    <p><strong>When to use it:</strong> You need to grab a few specific fields from an API response and optionally filter an array.</p>
+    <div class="before-after">
+      <div class="before-after-panel">
+        <div class="before-after-label before">Raw API Response</div>
+        <div class="code-block">{
+  "data": {
+    "id": "prod_123",
+    "items": [
+      {"id": 1, "status": "active",
+       "name": "Widget"},
+      {"id": 2, "status": "inactive",
+       "name": "Gadget"},
+      {"id": 3, "status": "active",
+       "name": "Thing"}
+    ]
+  }
+}</div>
+      </div>
+      <div class="before-after-panel">
+        <div class="before-after-label after">Extracted Output</div>
+        <div class="code-block">{
+  "id": "prod_123",
+  "active_items": [
+    {"item_id": 1,
+     "item_name": "Widget"},
+    {"item_id": 3,
+     "item_name": "Thing"}
+  ]
+}</div>
+      </div>
+    </div>
+    <div class="code-label">The spec that does this</div>
+    <div class="code-block">spec = {
+    "extract": {
+        "id": "$.data.id",
+        "active_items": {
+            "path": "$.data.items[*]",
+            "where": {"status": "active"},
+            "select": {"item_id": "id", "item_name": "name"},
+            "collect": True
+        }
+    }
+}
+result = process(spec, data)</div>
+  </div>
+
+  <!-- QUERY TAB -->
+  <div class="feature-panel" id="tab-query">
+    <h3>Advanced Querying</h3>
+    <p>The <span class="code-inline">query()</span> API adds hierarchical chaining, MongoDB-style filter operators (greater-than, regex, in-list, etc.), sorting, pagination, and parent-to-child field carry-forward.</p>
+    <p><strong>When to use it:</strong> You need complex filtering logic, sorted results, pagination, or multi-level nested extraction.</p>
+    <div class="before-after">
+      <div class="before-after-panel">
+        <div class="before-after-label before">Complex Nested Data</div>
+        <div class="code-block">{
+  "orders": [
+    {"id": 1, "status": "shipped",
+     "total": 99.99},
+    {"id": 2, "status": "pending",
+     "total": 149.99},
+    {"id": 3, "status": "shipped",
+     "total": 29.99}
+  ]
+}</div>
+      </div>
+      <div class="before-after-panel">
+        <div class="before-after-label after">Filtered, Sorted Output</div>
+        <div class="code-block">[
+  {"order_id": 3,
+   "amount": 29.99},
+  {"order_id": 1,
+   "amount": 99.99}
+]</div>
+      </div>
+    </div>
+    <div class="code-label">The spec that does this</div>
+    <div class="code-block">spec = {
+    "from": "$.orders[*]",
+    "where": {"status": "shipped"},
+    "select": {"order_id": "id", "amount": "total"},
+    "sort": [{"field": "total", "order": "asc"}],
+    "collect": True
+}
+result = query(spec, data)</div>
+  </div>
+
+  <!-- PIPELINE TAB -->
+  <div class="feature-panel" id="tab-pipeline">
+    <h3>Multi-Stage Pipelines</h3>
+    <p>The <span class="code-inline">pipeline()</span> API lets you run multiple named stages that can reference each other's output. This enables joins across sibling arrays -- like SQL joins but for JSON.</p>
+    <p><strong>When to use it:</strong> You need to cross-reference data between separate arrays in the same API response (e.g., match rates to start times in a booking API).</p>
+    <div class="code-label">Example: join rates to start times</div>
+    <div class="code-block">stages = [
+    {
+        "id": "rate",
+        "from": "$.rates[*]",
+        "where": {"id": 1},
+        "select": {"startTimeIds": "startTimeIds"}
+    },
+    {
+        "from": "$.startTimes[*]",
+        "where": {
+            "id": {"$in": "$stages.rate.startTimeIds"}
+        },
+        "collect": True,
+        "select": {"hour": "hour", "minute": "minute"}
+    }
+]
+result = pipeline(stages, data)</div>
+    <p style="margin-top:12px;">Stage 1 finds a rate and captures its <span class="code-inline">startTimeIds</span>. Stage 2 uses that list to filter the start times array. The result is only the start times matching the selected rate.</p>
+  </div>
+</section>
+
+<!-- ===== PIPELINE VISUALIZATION ===== -->
+<section id="pipeline-viz">
+  <h2>Pipeline Visualization</h2>
+  <p>A pipeline is a sequence of named stages. Each stage reads from the original data and can reference the output of any earlier stage. Here is how a three-stage pipeline flows:</p>
+
+  <div class="pipeline-diagram">
+    <div class="pipeline-stage">
+      <div class="pipeline-stage-num">1</div>
+      <div class="pipeline-stage-content">
+        <div class="pipeline-stage-name">Stage: find_rate</div>
+        <div class="pipeline-stage-desc">Filter <span class="code-inline">$.rates[*]</span> to find the rate matching id=1. Select its <span class="code-inline">startTimeIds</span> list.</div>
+      </div>
+    </div>
+    <div class="pipeline-stage">
+      <div class="pipeline-stage-num">2</div>
+      <div class="pipeline-stage-content">
+        <div class="pipeline-stage-name">Stage: find_times</div>
+        <div class="pipeline-stage-desc">Filter <span class="code-inline">$.startTimes[*]</span> where id is in the rate's time list.</div>
+        <div class="pipeline-ref-badge">$stages.find_rate.startTimeIds</div>
+      </div>
+    </div>
+    <div class="pipeline-stage">
+      <div class="pipeline-stage-num">3</div>
+      <div class="pipeline-stage-content">
+        <div class="pipeline-stage-name">Stage: final_output</div>
+        <div class="pipeline-stage-desc">Project and format the matched start times into the final output shape for the application.</div>
+        <div class="pipeline-ref-badge">$stages.find_times.hour</div>
+      </div>
+    </div>
+  </div>
+
+  <p>Key behaviors of pipelines:</p>
+  <ul style="padding-left: 20px; color: var(--color-text-secondary);">
+    <li>Every stage reads from the <strong>original root data</strong>, not from the previous stage's output.</li>
+    <li>Stages reference earlier outputs using the <span class="code-inline">$stages.&lt;id&gt;.&lt;field&gt;</span> syntax in their <span class="code-inline">where</span> clauses.</li>
+    <li>The <strong>last stage's output</strong> becomes the pipeline's return value.</li>
+    <li>Stages without an <span class="code-inline">id</span> still execute but cannot be referenced by later stages.</li>
+  </ul>
+</section>
+
+<!-- ===== QUICK START ===== -->
+<section id="quick-start">
+  <h2>Quick Start</h2>
+  <p>Get up and running in under two minutes.</p>
+
+  <h3>1. Install</h3>
+  <div class="code-block">pip install siphon-dsl</div>
+
+  <h3>2. Write a spec</h3>
+  <div class="code-block">from siphon import process
+
+data = {
+    "users": [
+        {"name": "Alice", "role": "admin", "active": True},
+        {"name": "Bob",   "role": "viewer", "active": False},
+        {"name": "Carol", "role": "admin", "active": True},
+    ]
+}
+
+spec = {
+    "extract": {
+        "active_admins": {
+            "path": "$.users[*]",
+            "where": {"role": "admin", "active": True},
+            "select": {"name": "name"},
+            "collect": True
+        }
+    }
+}
+
+result = process(spec, data)
+# {"active_admins": [{"name": "Alice"}, {"name": "Carol"}]}</div>
+
+  <h3>3. Optional extras</h3>
+  <div class="code-block"># For fetching from live APIs:
+pip install siphon-dsl[http]
+
+# For Pydantic-validated specs:
+pip install siphon-dsl[typed]</div>
+
+  <h3>4. Use the advanced APIs (optional)</h3>
+  <div class="code-block"># Chaining query with MongoDB-style filters
+from siphon import query
+
+result = query({
+    "from": "$.users[*]",
+    "where": {"role": {"$ne": "viewer"}},
+    "sort": [{"field": "name", "order": "asc"}],
+    "collect": True
+}, data)
+
+# Multi-stage pipeline
+from siphon import pipeline
+
+result = pipeline([
+    {"id": "admins", "from": "$.users[*]",
+     "where": {"role": "admin"}, "collect": True,
+     "select": {"name": "name"}},
+    {"from": "$.users[*]",
+     "where": {"name": {"$in": "$stages.admins.name"}},
+     "collect": True}
+], data)</div>
+</section>
+
+<!-- ===== FAQ ===== -->
+<section id="faq">
+  <h2>Frequently Asked Questions</h2>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        How is this different from writing custom Python code for each API?
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>Custom code is imperative -- you write loops, conditionals, and variable assignments every time. Siphon specs are declarative -- you describe <em>what</em> you want, not <em>how</em> to get it. This means specs are shorter, easier to review, and can be changed by anyone on the team without touching application code. When the API changes, you update a config file instead of debugging nested loops.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        Does Siphon replace tools like jq or JSONPath?
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>Siphon is complementary. Tools like jq are powerful but command-line focused. Siphon is designed to be embedded in Python applications. Its specs can be stored as YAML files, validated with Pydantic, and composed into multi-stage pipelines. It is purpose-built for API integration workflows rather than ad-hoc querying.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        What APIs does Siphon work with?
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>Any API that returns JSON. Siphon operates on Python dictionaries, so it works with REST APIs, GraphQL responses, webhook payloads, or any other JSON data source. It is completely agnostic about where the data comes from.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        Is it production-ready?
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>Yes. Siphon is published on PyPI as <span class="code-inline">siphon-dsl</span>, has a comprehensive test suite (120+ tests), CI/CD via GitHub Actions, and is MIT-licensed. The core library has zero runtime dependencies and supports Python 3.10+.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        What is the learning curve?
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>Most developers can write their first spec in under five minutes. The <span class="code-inline">process()</span> API requires learning just four concepts: path, where, select, and collect. The advanced <span class="code-inline">query()</span> and <span class="code-inline">pipeline()</span> APIs add more power but follow the same patterns.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        Can non-engineers write or modify specs?
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>That is one of Siphon's design goals. Specs are plain YAML or JSON with no programming constructs. A product manager or data analyst who understands the API response structure can write and modify specs. The Pydantic-typed interface provides validation so errors are caught early with clear messages.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        How does the pipeline feature compare to SQL joins?
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>Pipelines solve a similar problem: combining data from related but separate collections. In SQL, you join tables on a shared key. In Siphon, you run a stage to extract IDs from one array, then use <span class="code-inline">$stages.&lt;id&gt;.&lt;field&gt;</span> references to filter another array by those IDs. The concept is the same; the syntax is adapted for JSON.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== GLOSSARY ===== -->
+<section id="glossary">
+  <h2>Glossary</h2>
+  <div class="glossary-grid">
+    <div class="glossary-item">
+      <div class="glossary-term">Spec</div>
+      <div class="glossary-def">A declarative description of what data to extract. Written as a YAML or JSON dictionary. Analogous to a SQL query but for JSON.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Path</div>
+      <div class="glossary-def">A dot-notation string that describes where data lives in a JSON structure. Example: <span class="code-inline">$.data.items[*].name</span></div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">[*] (Star Notation)</div>
+      <div class="glossary-def">A marker in a path that means "iterate over every item in this array." Siphon processes each element and applies filters/projections to each one.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Where (Filter)</div>
+      <div class="glossary-def">A set of conditions that items must match to be included in the output. Supports simple equality and MongoDB-style operators like $gt, $in, $regex.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Select (Projection)</div>
+      <div class="glossary-def">A mapping that renames and reshapes output fields. Example: <span class="code-inline">{"cost": "pricing.amount"}</span> extracts the nested amount field and renames it to "cost".</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Collect</div>
+      <div class="glossary-def">A flag that controls whether Siphon returns just the first match (default) or all matches as a list.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Pipeline</div>
+      <div class="glossary-def">A sequence of named extraction stages that run against the same root data. Later stages can reference earlier stages' output, enabling cross-array joins.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Carry-Forward</div>
+      <div class="glossary-def">When using chained queries with "then", parent-level fields are automatically merged into child results. This means child items inherit context from their parents.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Ancestor Filtering</div>
+      <div class="glossary-def">The ability to filter deeply nested items by properties that belong to their parent or grandparent levels. For example, filtering passengers by their parent rate's ID.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">DSL (Domain-Specific Language)</div>
+      <div class="glossary-def">A small, focused language designed for one specific task. Siphon's DSL is the spec format -- a mini-language for describing JSON data extraction.</div>
+    </div>
+  </div>
+</section>
+
+</div>
+</main>
+
+<script>
+/* ===== THEME TOGGLE ===== */
+(function() {
+  const stored = localStorage.getItem('siphon-theme');
+  if (stored === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+
+document.getElementById('themeToggle').addEventListener('click', function() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('siphon-theme', 'light');
+    this.textContent = 'Dark';
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    localStorage.setItem('siphon-theme', 'dark');
+    this.textContent = 'Light';
+  }
+});
+
+// Set button text on load
+(function() {
+  const btn = document.getElementById('themeToggle');
+  btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? 'Light' : 'Dark';
+})();
+
+/* ===== SIDEBAR TOGGLE (MOBILE) ===== */
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// Close sidebar on nav click (mobile)
+document.querySelectorAll('.sidebar-nav a').forEach(function(link) {
+  link.addEventListener('click', function() {
+    document.getElementById('sidebar').classList.remove('open');
+  });
+});
+
+/* ===== ACTIVE SIDEBAR LINK ===== */
+(function() {
+  var sections = document.querySelectorAll('section[id]');
+  var navLinks = document.querySelectorAll('.sidebar-nav a[data-section]');
+
+  function setActive() {
+    var scrollPos = window.scrollY + 100;
+    var current = '';
+    sections.forEach(function(section) {
+      if (section.offsetTop <= scrollPos) {
+        current = section.id;
+      }
+    });
+    navLinks.forEach(function(link) {
+      link.classList.toggle('active', link.getAttribute('data-section') === current);
+    });
+  }
+
+  window.addEventListener('scroll', setActive);
+  setActive();
+})();
+
+/* ===== COLLAPSIBLE ===== */
+function toggleCollapsible(btn) {
+  btn.parentElement.classList.toggle('open');
+}
+
+/* ===== FEATURE TABS ===== */
+function switchTab(tabId) {
+  document.querySelectorAll('.feature-tab').forEach(function(t) {
+    t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
+    t.setAttribute('aria-selected', t.getAttribute('data-tab') === tabId ? 'true' : 'false');
+  });
+  document.querySelectorAll('.feature-panel').forEach(function(p) {
+    p.classList.toggle('active', p.id === 'tab-' + tabId);
+  });
+}
+
+/* ===== SEARCH ===== */
+(function() {
+  var input = document.getElementById('searchInput');
+  var navLinks = document.querySelectorAll('.sidebar-nav a[data-section]');
+  var mainContent = document.getElementById('mainContent');
+  var originalHTML = null;
+
+  function clearHighlights() {
+    if (originalHTML !== null) {
+      mainContent.innerHTML = originalHTML;
+      originalHTML = null;
+      // Re-attach tab and collapsible event listeners after restoring HTML
+      reattachListeners();
+    }
+  }
+
+  function reattachListeners() {
+    document.querySelectorAll('.feature-tab').forEach(function(t) {
+      t.addEventListener('click', function() { switchTab(t.getAttribute('data-tab')); });
+    });
+    document.querySelectorAll('.collapsible-header').forEach(function(btn) {
+      btn.addEventListener('click', function() { toggleCollapsible(btn); });
+    });
+    document.querySelectorAll('.sidebar-nav a').forEach(function(link) {
+      link.addEventListener('click', function() {
+        document.getElementById('sidebar').classList.remove('open');
+      });
+    });
+  }
+
+  function highlightText(query) {
+    if (!query) { clearHighlights(); return; }
+    if (originalHTML === null) {
+      originalHTML = mainContent.innerHTML;
+    } else {
+      mainContent.innerHTML = originalHTML;
+    }
+
+    var escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var regex = new RegExp('(' + escaped + ')', 'gi');
+
+    function walk(node) {
+      if (node.nodeType === 3) {
+        if (regex.test(node.textContent)) {
+          var span = document.createElement('span');
+          span.innerHTML = node.textContent.replace(regex, '<mark class="search-highlight">$1</mark>');
+          node.parentNode.replaceChild(span, node);
+        }
+      } else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE' && !node.classList.contains('code-block')) {
+        Array.from(node.childNodes).forEach(walk);
+      }
+    }
+
+    walk(mainContent);
+    reattachListeners();
+  }
+
+  function filterNav(query) {
+    var lower = query.toLowerCase();
+    navLinks.forEach(function(link) {
+      if (!query) {
+        link.classList.remove('hidden');
+      } else {
+        var section = document.getElementById(link.getAttribute('data-section'));
+        var text = (link.textContent + ' ' + (section ? section.textContent : '')).toLowerCase();
+        link.classList.toggle('hidden', text.indexOf(lower) === -1);
+      }
+    });
+  }
+
+  input.addEventListener('input', function() {
+    var q = this.value.trim();
+    filterNav(q);
+    highlightText(q);
+  });
+})();
+</script>
+
+</body>
+</html>
