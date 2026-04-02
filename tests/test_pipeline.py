@@ -422,3 +422,236 @@ class TestPipelineEdgeCases:
             sibling_data,
         )
         assert result == [{"hour": 12}]
+
+
+class TestBokunActivityPipeline:
+    """Real-world test: Bokun activity API — filter startTimes & pricingCategories by rateId."""
+
+    @pytest.fixture
+    def bokun_activity(self):
+        return {
+            "id": 853863,
+            "title": "Pasta Lovers Cooking Class",
+            "defaultRateId": 1674388,
+            "rates": [
+                {
+                    "id": 1641235,
+                    "title": "Extended Cooking Class + Grocery Market tour",
+                    "startTimeIds": [2937449],
+                    "pricingCategoryIds": [120729, 120731, 120732],
+                },
+                {
+                    "id": 1674388,
+                    "title": "English - Express Afternoon Cooking Class",
+                    "startTimeIds": [4208239, 4208240],
+                    "pricingCategoryIds": [120729, 120731, 120732],
+                },
+                {
+                    "id": 2224998,
+                    "title": "Spanish - Express Afternoon Cooking Class",
+                    "startTimeIds": [4462236],
+                    "pricingCategoryIds": [120729, 120731, 120732],
+                },
+            ],
+            "startTimes": [
+                {
+                    "id": 2937449,
+                    "externalLabel": "Cooking Class + Market",
+                    "hour": 9,
+                    "minute": 0,
+                    "durationHours": 4,
+                    "durationMinutes": 30,
+                },
+                {
+                    "id": 3576860,
+                    "externalLabel": "2.00 PM Express Tour",
+                    "hour": 14,
+                    "minute": 0,
+                    "durationHours": 3,
+                    "durationMinutes": 0,
+                },
+                {
+                    "id": 4208239,
+                    "externalLabel": "Express Cooking Class",
+                    "hour": 14,
+                    "minute": 30,
+                    "durationHours": 4,
+                    "durationMinutes": 0,
+                },
+                {
+                    "id": 3575089,
+                    "externalLabel": "5.30 PM Express Class",
+                    "hour": 17,
+                    "minute": 30,
+                    "durationHours": 3,
+                    "durationMinutes": 30,
+                },
+                {
+                    "id": 4208240,
+                    "externalLabel": "English PM Express Class",
+                    "hour": 18,
+                    "minute": 0,
+                    "durationHours": 3,
+                    "durationMinutes": 0,
+                },
+                {
+                    "id": 4462236,
+                    "externalLabel": "Spanish PM Express Class",
+                    "hour": 18,
+                    "minute": 0,
+                    "durationHours": 3,
+                    "durationMinutes": 0,
+                },
+            ],
+            "pricingCategories": [
+                {
+                    "id": 120729,
+                    "title": "Adult",
+                    "ticketCategory": "ADULT",
+                    "minAge": 0,
+                    "maxAge": 99,
+                },
+                {
+                    "id": 120731,
+                    "title": "Child",
+                    "ticketCategory": "CHILD",
+                    "minAge": 4,
+                    "maxAge": 12,
+                },
+                {
+                    "id": 120732,
+                    "title": "Infant",
+                    "ticketCategory": "INFANT",
+                    "minAge": 0,
+                    "maxAge": 3,
+                },
+            ],
+        }
+
+    def test_start_times_for_rate(self, bokun_activity):
+        """Filter startTimes for the Extended rate (rateId=1641235)."""
+        result = pipeline(
+            [
+                {
+                    "id": "rate",
+                    "from": "$.rates[*]",
+                    "where": {"id": 1641235},
+                    "select": {"startTimeIds": "startTimeIds", "rateTitle": "title"},
+                },
+                {
+                    "from": "$.startTimes[*]",
+                    "where": {"id": {"$in": "$stages.rate.startTimeIds"}},
+                    "collect": True,
+                    "select": {
+                        "id": "id",
+                        "label": "externalLabel",
+                        "hour": "hour",
+                        "minute": "minute",
+                    },
+                },
+            ],
+            bokun_activity,
+        )
+        assert result == [
+            {"id": 2937449, "label": "Cooking Class + Market", "hour": 9, "minute": 0},
+        ]
+
+    def test_start_times_for_default_rate(self, bokun_activity):
+        """Filter startTimes for the default rate (English Express, rateId=1674388)."""
+        result = pipeline(
+            [
+                {
+                    "id": "rate",
+                    "from": "$.rates[*]",
+                    "where": {"id": 1674388},
+                    "select": {"startTimeIds": "startTimeIds"},
+                },
+                {
+                    "from": "$.startTimes[*]",
+                    "where": {"id": {"$in": "$stages.rate.startTimeIds"}},
+                    "collect": True,
+                    "select": {"label": "externalLabel", "hour": "hour", "minute": "minute"},
+                },
+            ],
+            bokun_activity,
+        )
+        assert result == [
+            {"label": "Express Cooking Class", "hour": 14, "minute": 30},
+            {"label": "English PM Express Class", "hour": 18, "minute": 0},
+        ]
+
+    def test_rate_with_start_times_and_pricing(self, bokun_activity):
+        """Three-stage: rate → startTimes + rate → pricingCategories."""
+        start_times = pipeline(
+            [
+                {
+                    "id": "rate",
+                    "from": "$.rates[*]",
+                    "where": {"id": 2224998},
+                    "select": {"startTimeIds": "startTimeIds"},
+                },
+                {
+                    "from": "$.startTimes[*]",
+                    "where": {"id": {"$in": "$stages.rate.startTimeIds"}},
+                    "collect": True,
+                    "select": {"label": "externalLabel", "hour": "hour"},
+                },
+            ],
+            bokun_activity,
+        )
+        assert start_times == [{"label": "Spanish PM Express Class", "hour": 18}]
+
+    def test_pricing_categories_for_rate(self, bokun_activity):
+        """Filter pricingCategories by a rate's pricingCategoryIds."""
+        result = pipeline(
+            [
+                {
+                    "id": "rate",
+                    "from": "$.rates[*]",
+                    "where": {"id": 1641235},
+                    "select": {"pricingCategoryIds": "pricingCategoryIds"},
+                },
+                {
+                    "from": "$.pricingCategories[*]",
+                    "where": {"id": {"$in": "$stages.rate.pricingCategoryIds"}},
+                    "collect": True,
+                    "select": {
+                        "title": "title",
+                        "category": "ticketCategory",
+                        "minAge": "minAge",
+                        "maxAge": "maxAge",
+                    },
+                },
+            ],
+            bokun_activity,
+        )
+        assert result == [
+            {"title": "Adult", "category": "ADULT", "minAge": 0, "maxAge": 99},
+            {"title": "Child", "category": "CHILD", "minAge": 4, "maxAge": 12},
+            {"title": "Infant", "category": "INFANT", "minAge": 0, "maxAge": 3},
+        ]
+
+    def test_full_variant_resolution(self, bokun_activity):
+        """Full variant: rate → startTimes sorted by hour, with rate title carried via stages."""
+        result = pipeline(
+            [
+                {
+                    "id": "rate",
+                    "from": "$.rates[*]",
+                    "where": {"id": 1674388},
+                    "select": {"startTimeIds": "startTimeIds", "rateTitle": "title"},
+                },
+                {
+                    "from": "$.startTimes[*]",
+                    "where": {"id": {"$in": "$stages.rate.startTimeIds"}},
+                    "sort": [{"field": "hour", "order": "asc"}],
+                    "collect": True,
+                    "select": {"label": "externalLabel", "hour": "hour", "minute": "minute"},
+                },
+            ],
+            bokun_activity,
+        )
+        assert result == [
+            {"label": "Express Cooking Class", "hour": 14, "minute": 30},
+            {"label": "English PM Express Class", "hour": 18, "minute": 0},
+        ]
