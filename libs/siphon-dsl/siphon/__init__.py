@@ -15,12 +15,17 @@ Supports (chaining API v0.6.0+):
 - Logical operators: $and, $or, $not, $nor
 - Sort, limit, offset at each level
 - Field carry-forward from parent levels
+
+Supports (pipeline API v0.7.0+):
+- GitHub Actions-style multi-stage pipeline with named stages
+- Cross-reference sibling arrays via $stages.<id>.<field> in where clauses
+- Each stage's `from` resolves against root data
 """
 
 from dataclasses import dataclass
 from typing import Any
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 
 @dataclass
@@ -134,5 +139,6 @@ def fetch_and_process(spec: dict, base_url: str) -> dict:
     return process(spec, data)
 
 
-# Import the chaining query API (v0.6.0+)
+# Import the chaining query API (v0.6.0+) and pipeline API (v0.7.0+)
+from siphon._chain import pipeline as pipeline  # noqa: E402
 from siphon._chain import query as query  # noqa: E402
