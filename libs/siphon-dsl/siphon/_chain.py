@@ -46,10 +46,10 @@ def eval_condition(value: Any, condition: Any) -> bool:
             result = value is not None and value <= operand
 
         elif op == "$in":
-            result = operand is not None and value in operand
+            result = value is not None and operand is not None and value in operand
 
         elif op == "$nin":
-            result = operand is None or value not in operand
+            result = value is None or operand is None or value not in operand
 
         elif op == "$exists":
             result = (value is not None) == operand
@@ -373,24 +373,17 @@ def pipeline(stages: list[dict[str, Any]], data: Any) -> list | dict | None:
     result = None
 
     for stage in stages:
-        # Resolve $stages references in where
+        stage_id = stage.get("id")
+
+        # Build resolved stage: resolve $stages refs in where, strip id
         resolved_where = resolve_refs(stage.get("where"), stages_context)
-        resolved_stage = {**stage}
+        resolved_stage = {k: v for k, v in stage.items() if k != "id"}
         if resolved_where is not None:
             resolved_stage["where"] = resolved_where
-        else:
-            resolved_stage.pop("where", None)
 
-        # Remove id before passing to execute_chain (not a chain key)
-        stage_id = resolved_stage.pop("id", None)
+        # Delegate to query() (handles decompose_multi_star + execute_chain)
+        result = query(resolved_stage, data)
 
-        # Decompose multi-star paths
-        resolved_stage = decompose_multi_star(resolved_stage)
-
-        # Execute against root data
-        result = execute_chain(resolved_stage, data, root_data=data)
-
-        # Store output for downstream references
         if stage_id is not None:
             stages_context[stage_id] = result
 
