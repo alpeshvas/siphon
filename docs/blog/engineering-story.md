@@ -1,37 +1,120 @@
-# Siphon: The 100-Line Library That Replaced Thousands of Lines of API Glue Code
+# Siphon: The 100-Line Library Born From LLM Hallucinations and API Chaos
 
-*How a weekend frustration turned into a declarative DSL for JSON extraction*
+*How feeding raw API responses to an LLM led to a declarative DSL for JSON extraction*
 
 ---
 
-## The 2 AM Realization
+## The Hallucination That Started Everything
 
-It started, as many side projects do, with a moment of quiet rage.
+We were building an AI-powered travel assistant. The idea was simple: call a booking API, get availability and pricing, feed it to an LLM, and let the model generate a helpful response for the customer. The prototype took an afternoon. The production version took months — and the hardest problem wasn't the AI.
 
-Picture this: you're integrating your third external API of the week. The first was a payments provider whose response buried transaction amounts four levels deep inside a `data.transactions[].line_items[].pricing.amount` path. The second was a travel booking API that nested passenger details inside rate tiers inside date ranges — three layers of arrays, each with its own filtering logic. The third was an e-commerce catalog that returned everything about a product except what you actually needed, unless you dug through nested variant arrays and filtered by status.
+It was the JSON.
 
-For each one, the story was the same. You'd write a function. It would loop through the outer array, then the inner array, maybe a third. You'd sprinkle in `if` statements to filter. You'd build a new dictionary to reshape the output. Twenty, thirty, fifty lines of imperative code — just to say "give me the active items' names and prices."
+A single call to our booking provider's price list endpoint returned a response like this — and this is the *simplified* version:
 
-And here's what stung: the *intent* behind each of those functions was trivially simple. "Get the name from `data.id`." "Find all items where status is active." "Rename `pricing.amount` to `cost`." But the *code* to express that intent was verbose, repetitive, and fragile. Change the API response shape, and you'd be rewriting loops all over again.
+```json
+{
+  "activityId": 853863,
+  "title": "Pasta Lovers Cooking Class",
+  "isPriceConverted": true,
+  "conversionRate": 0.62,
+  "defaultCurrency": "CAD",
+  "pricesByDateRange": [
+    {
+      "from": "2026-01-20",
+      "to": "2027-01-20",
+      "rates": [
+        {
+          "rateId": 1565415,
+          "title": "All Inclusive Package",
+          "passengers": [
+            {
+              "pricingCategoryId": 789585,
+              "title": "Adult",
+              "ticketCategory": "ADULT",
+              "price": {
+                "currency": "EUR",
+                "amount": 184.35,
+                "ofWhichTax": 0.0,
+                "converted": true,
+                "conversionRate": 0.62,
+                "inferred": true
+              },
+              "tieredPrices": [],
+              "extras": []
+            }
+          ],
+          "extras": []
+        },
+        {
+          "rateId": 1760309,
+          "title": "Standard Tour",
+          "passengers": [...]
+        },
+        {
+          "rateId": 1567944,
+          "title": "Attractions Package",
+          "passengers": [...]
+        }
+      ]
+    }
+  ]
+}
+```
 
-That night, staring at yet another nested `for` loop inside a `for` loop, a thought crystallized: **What if the extraction logic wasn't code at all? What if it was just... data?**
+We dumped this into the LLM's context along with the user's question: *"How much does the standard cooking class cost for two adults?"*
+
+The LLM responded confidently: *"The Standard Tour for two adults costs €368.70."*
+
+Wrong. It had pulled `184.35` — the price for the **All Inclusive Package** — and doubled it. The Standard Tour was actually `€67.21` per adult. The model had conflated rate tiers because the response contained three rates with similar structures, and the field names (`title`, `passengers`, `price`) repeated at every level. The LLM had no way to distinguish which `amount` belonged to which `rateId`.
+
+We tried prompt engineering. *"Only look at the rate with title 'Standard Tour'."* It worked — until a rate was named "Standard Tour: No Add-ons" and the model matched on a partial string. We tried few-shot examples. They helped for one API but broke when the response shape changed. We tried asking the model to extract structured data first, then reason about it. That was more reliable, but now we were paying for two LLM calls, and the extraction step still hallucinated on deeply nested structures.
+
+**The fundamental problem became clear: LLMs hallucinate when you give them more context than they need.**
+
+This isn't a bug in the model. It's an information theory problem. When you stuff a 500-line JSON response into a context window, and only 5 lines contain the answer, you're asking the model to find a needle in a haystack of structurally similar fields. Every extra field is a potential distraction. Every similarly-named key at a different nesting level is an invitation to confuse one value for another. The model doesn't *know* which `amount` you mean — it *infers* it, probabilistically, from surrounding context. And when 90% of that context is irrelevant, inference goes wrong.
 
 ---
 
 ## The Problem, Stated Plainly
 
-Modern applications don't live in isolation. They consume APIs — dozens of them. And every API has its own opinion about how to structure a response. Some nest data under `data.attributes`. Others use flat arrays. Some bury what you need three levels deep. Nearly all of them return far more than you actually want.
+This wasn't just our problem. It's becoming the central challenge of the AI-plus-APIs era.
 
-The result? Every backend codebase accumulates a quiet layer of **glue code** — functions whose sole job is to reach into a JSON response, pluck out the fields that matter, maybe filter an array, maybe rename a key, and hand back a clean result.
+Modern applications — especially AI-powered ones — consume external APIs and need to reason about the responses. Whether it's an LLM agent calling tools, a RAG pipeline enriching context, or a chatbot answering questions from live data, the pattern is the same: **fetch JSON, extract what matters, discard the rest.**
 
-This glue code has a few nasty properties:
+But "extract what matters" is where things break down. There are two approaches, and both have serious problems:
 
-1. **It's boilerplate.** The logic is always the same: traverse, filter, project. But you write it from scratch every time.
-2. **It's coupled to API shapes.** When a provider changes their response format, your extraction logic breaks — even though what you *wanted* never changed.
-3. **It's invisible complexity.** Nobody writes tests for the "just grab the name from the response" function. But when it breaks at 2 AM in production, you notice.
-4. **It's not portable.** You can't hand your extraction logic to another team, store it in a config file, or version it alongside an API spec. It's buried in application code.
+### Approach 1: Feed the raw response to the LLM
 
-The question was: could you replace all of this with a simple, declarative spec — a few lines of YAML or JSON — that describes *what* to extract, not *how*?
+This is the fast path. Call the API, dump the JSON into the prompt, let the model figure it out. It works for simple, flat responses. But for nested, repetitive structures — the kind real-world APIs actually return — it fails in predictable ways:
+
+- **Context pollution.** A 500-line response might contain 5 lines of relevant data. The rest isn't just wasted tokens — it actively degrades the model's ability to find the right answer. Every irrelevant field with a plausible-sounding name (`amount`, `price`, `title`) is a trap.
+- **Structural confusion.** When the same field name appears at multiple nesting levels — `title` on a rate, `title` on a passenger, `title` on an activity — the model has to infer which one you mean from positional context. It gets this wrong more often than you'd expect.
+- **Token cost.** You're paying for the model to process hundreds of irrelevant fields. At scale, this adds up fast. A single Bokun activity response can be 2,000+ tokens. The 5 fields you actually need? Maybe 50 tokens.
+- **Non-determinism.** The same prompt with the same data can produce different extractions on different runs. You can't build reliable systems on probabilistic JSON parsing.
+
+### Approach 2: Write extraction code
+
+This is the traditional path. Write a Python function that traverses the response, filters arrays, projects fields, and returns a clean dictionary. It's deterministic. It's fast. It's also:
+
+- **Boilerplate.** The logic is always the same: traverse, filter, project. But you write it from scratch every time.
+- **Coupled to API shapes.** When a provider changes their response format, your extraction logic breaks — even though what you *wanted* never changed.
+- **Invisible complexity.** Nobody writes tests for the "just grab the name from the response" function. But when it breaks at 2 AM in production, you notice.
+- **Not portable.** You can't hand your extraction logic to another team, store it in a config file, or version it alongside an API spec. It's buried in application code.
+- **Doesn't compose with AI.** You can't easily tell an LLM "use this extraction logic" because the logic is imperative Python, not a readable declaration of intent.
+
+### The Missing Middle
+
+What we needed was something between "dump raw JSON into the LLM" and "write bespoke Python for every API." Something that could:
+
+1. **Surgically extract** only the relevant fields from a nested response
+2. **Filter and reshape** arrays without writing loops
+3. **Express intent declaratively** — as data, not code — so the spec itself could be understood by both humans and machines
+4. **Run deterministically** before the LLM ever sees the data, so the model only receives clean, relevant context
+
+The question crystallized: **What if extraction logic wasn't code at all? What if it was just... data?**
+
+That's how Siphon was born.
 
 ---
 
@@ -402,6 +485,80 @@ Every major Siphon feature — ancestor filtering, chaining, pipelines — was b
 
 **5. 100 lines is a feature, not a limitation.**
 When your library is small enough to read in one sitting, users trust it. They can debug it. They can fork it, understand it, and extend it. The entire core of Siphon fits in a single file. That's not a constraint to apologize for — it's a design goal to protect.
+
+---
+
+## Closing the Loop: Siphon as an LLM Pre-Processor
+
+Remember the hallucination that started this story? The LLM that confused a €184.35 All Inclusive Package with the €67.21 Standard Tour?
+
+Here's what the fix looked like with Siphon in the pipeline:
+
+**Before (raw dump into LLM context):**
+```
+System: You are a travel assistant. Here is the pricing data:
+{full 2,000-token Bokun response with 3 rates, 6 passengers, 
+ conversion rates, tax fields, tiered prices, extras...}
+
+User: How much does the standard cooking class cost for two adults?
+
+LLM: "The Standard Tour costs €368.70 for two adults." ← WRONG (confused rates)
+```
+
+**After (Siphon extracts first, LLM reasons on clean data):**
+```python
+# Step 1: Siphon extracts exactly what's needed — deterministically
+clean = process({
+    "extract": {
+        "passengers": {
+            "path": "$.pricesByDateRange[*].rates[*].passengers[*]",
+            "where": {"rateId": 1760309},  # Standard Tour
+            "select": {
+                "category": "ticketCategory",
+                "amount": "price.amount",
+                "currency": "price.currency"
+            },
+            "collect": True
+        }
+    }
+}, raw_response)
+
+# Result: {"passengers": [
+#   {"category": "ADULT", "amount": 67.21, "currency": "EUR"},
+#   {"category": "CHILD", "amount": 61.04, "currency": "EUR"}
+# ]}
+```
+
+```
+System: You are a travel assistant. Here is the pricing data:
+{"passengers": [
+  {"category": "ADULT", "amount": 67.21, "currency": "EUR"},
+  {"category": "CHILD", "amount": 61.04, "currency": "EUR"}
+]}
+
+User: How much does the standard cooking class cost for two adults?
+
+LLM: "The Standard Tour costs €134.42 for two adults (€67.21 per adult)." ← CORRECT
+```
+
+The difference is stark:
+
+| | Raw Dump | Siphon First |
+|---|---|---|
+| **Tokens sent to LLM** | ~2,000 | ~50 |
+| **Irrelevant fields** | ~95% of payload | 0% |
+| **Hallucination risk** | High (similar structures) | Near zero (unambiguous data) |
+| **Deterministic** | No | Yes (extraction is code, not inference) |
+| **Cost per query** | High | ~97% reduction in context tokens |
+| **Latency** | Slower (more tokens to process) | Faster |
+
+This is the pattern Siphon enables: **deterministic extraction as a pre-processing step, so the LLM only sees what it needs to reason about.** The extraction is fast (microseconds, not milliseconds), correct (it's code, not probabilistic inference), and declarative (the spec is readable by humans and versionable in git).
+
+The spec becomes a contract between the API and the AI. When the API changes, you update the spec — not the prompt, not the model, not the application code. When you add a new field, you add it to the spec and the LLM immediately sees it in its context. The spec is the single source of truth for "what data does this AI feature need?"
+
+For AI agent architectures — where an LLM calls tools and processes their outputs in a loop — this matters even more. Each tool call returns a response, and each response inflates the context window. Without extraction, a five-step agent workflow can easily consume 10,000+ tokens of raw API responses, most of it noise. With Siphon specs attached to each tool, the agent's context stays lean, focused, and far less likely to drift into hallucination territory.
+
+**Siphon doesn't make LLMs smarter. It makes their inputs cleaner. And clean inputs are the cheapest, most reliable way to get better outputs.**
 
 ---
 
