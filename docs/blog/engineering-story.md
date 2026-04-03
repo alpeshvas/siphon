@@ -250,6 +250,116 @@ The implementation is elegant in its simplicity. A `resolve_refs` function recur
 
 ---
 
+## In Production: The Bokun Integration
+
+Every library has a story about the integration that proved it wasn't just a side project anymore. For Siphon, that was Bokun.
+
+Bokun is a travel activities and booking platform. If you've ever booked a cooking class in Rome, a snorkeling tour in Bali, or a museum pass in Barcelona through an online marketplace, there's a good chance Bokun's API was involved somewhere in the chain. Its API is comprehensive — and comprehensively nested.
+
+Consider what happens when a travel marketplace needs to display available time slots for a cooking class. The Bokun activity endpoint returns a structure like this:
+
+```json
+{
+  "id": 853863,
+  "title": "Pasta Lovers Cooking Class",
+  "defaultRateId": 1674388,
+  "rates": [
+    {
+      "id": 1674388,
+      "title": "English - Express Afternoon Cooking Class",
+      "startTimeIds": [4208239, 4208240],
+      "pricingCategoryIds": [120729, 120731, 120732]
+    },
+    {
+      "id": 1641235,
+      "title": "Extended Cooking Class + Grocery Market Tour",
+      "startTimeIds": [2937449],
+      "pricingCategoryIds": [120729, 120731, 120732]
+    }
+  ],
+  "startTimes": [
+    {"id": 2937449, "externalLabel": "Cooking Class + Market", "hour": 9, "minute": 0},
+    {"id": 4208239, "externalLabel": "Express Cooking Class", "hour": 14, "minute": 30},
+    {"id": 4208240, "externalLabel": "English PM Express Class", "hour": 18, "minute": 0}
+  ],
+  "pricingCategories": [
+    {"id": 120729, "title": "Adult", "ticketCategory": "ADULT"},
+    {"id": 120731, "title": "Child", "ticketCategory": "CHILD"},
+    {"id": 120732, "title": "Infant", "ticketCategory": "INFANT"}
+  ]
+}
+```
+
+Notice the shape. Rates, start times, and pricing categories live in **sibling arrays** linked by foreign key IDs — `startTimeIds` and `pricingCategoryIds`. To show the user "for the Express Afternoon class, available times are 2:30 PM and 6:00 PM, for Adults, Children, and Infants" — you need to:
+
+1. Find the rate by ID
+2. Extract its `startTimeIds`
+3. Filter the `startTimes` array to only those IDs
+4. Do the same for `pricingCategoryIds` against `pricingCategories`
+
+In imperative code, that's a lookup table, two filter loops, and a handful of intermediate variables. Every time the shape changes or a new field is needed, someone edits a Python function and hopes the tests still pass.
+
+With Siphon's pipeline API, the entire extraction is a data structure:
+
+```python
+result = pipeline([
+    {
+        "id": "rate",
+        "from": "$.rates[*]",
+        "where": {"id": 1674388},
+        "select": {"startTimeIds": "startTimeIds"}
+    },
+    {
+        "from": "$.startTimes[*]",
+        "where": {"id": {"$in": "$stages.rate.startTimeIds"}},
+        "sort": [{"field": "hour", "order": "asc"}],
+        "collect": True,
+        "select": {"label": "externalLabel", "hour": "hour", "minute": "minute"}
+    }
+], data)
+
+# [
+#   {"label": "Express Cooking Class", "hour": 14, "minute": 30},
+#   {"label": "English PM Express Class", "hour": 18, "minute": 0}
+# ]
+```
+
+Two stages. The first finds the rate and captures its start time IDs. The second filters the start times array using those IDs — a cross-reference join expressed as a `$stages` reference. No intermediate variables. No loops. The spec reads like a description of the business logic: "find this rate, then find its start times, sorted by hour."
+
+The pricing side of Bokun pushed things further. The price list endpoint nests data three levels deep — date ranges contain rates, rates contain passengers (ticket types), and each passenger has currency-converted pricing:
+
+```python
+spec = {
+    "extract": {
+        "passengers": {
+            "path": "$.pricesByDateRange[*].rates[*].passengers[*]",
+            "where": {"rateId": 1760309},
+            "select": {
+                "title": "title",
+                "ticketCategory": "ticketCategory",
+                "amount": "price.amount",
+                "currency": "price.currency"
+            },
+            "collect": True
+        }
+    }
+}
+```
+
+That `where: {rateId: 1760309}` is ancestor filtering in action — `rateId` lives on the rate object two levels above the passenger, but Siphon's context accumulation finds it automatically.
+
+### What the Integration Taught Us
+
+The Bokun integration wasn't just a user of Siphon — it was the proving ground that shaped the library's evolution:
+
+- **Ancestor filtering (v0.5)** was born because the price list API required filtering passengers by their parent rate's ID — a pattern that's impossible with leaf-only matching.
+- **The chaining engine (v0.6)** was built because rates, start times, and pricing categories live in sibling arrays that need to be joined — a fundamentally different pattern from nested traversal.
+- **The pipeline API (v0.7)** emerged because real integrations need to cross-reference multiple independent arrays in sequence, not just drill into one hierarchy.
+
+Each version of Siphon was shaped by a real API response that the previous version couldn't handle cleanly. The Bokun integration was the pressure that forged the library's most powerful features — and validated that a declarative spec could replace hundreds of lines of bespoke extraction code in a production system handling real bookings, real money, and real travelers.
+
+---
+
 ## The Architecture of Restraint
 
 Looking at Siphon today — v0.7, the full library — what's remarkable is what it *isn't*.
