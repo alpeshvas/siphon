@@ -41,3 +41,7 @@ htmlcov/
 
 # Build
 *.whl
+
+# Blog title suggestions (local notes)
+blog-title-suggestions.md
+docs/engineering-blog.md
