@@ -132,6 +132,7 @@ def _date_key(dt_str: str) -> tuple:
 def _datetime_key(dt_str: str):
     """Return a timezone-aware datetime for full ISO 8601 comparison across timezones."""
     from datetime import datetime
+
     return datetime.fromisoformat(dt_str)
 
 
@@ -153,17 +154,28 @@ class Extractor:
             if not values:
                 return None
 
-            if op == "min_time":        return min(values, key=_time_key)
-            if op == "max_time":        return max(values, key=_time_key)
-            if op == "min_date":        return min(values, key=_date_key)
-            if op == "max_date":        return max(values, key=_date_key)
-            if op == "min_datetime":    return min(values, key=_datetime_key)
-            if op == "max_datetime":    return max(values, key=_datetime_key)
-            if op == "min_int":         return min(values)
-            if op == "max_int":         return max(values)
-            if op == "sum":             return sum(values)
-            if op == "first":           return values[0]
-            if op == "last":            return values[-1]
+            if op == "min_time":
+                return min(values, key=_time_key)
+            if op == "max_time":
+                return max(values, key=_time_key)
+            if op == "min_date":
+                return min(values, key=_date_key)
+            if op == "max_date":
+                return max(values, key=_date_key)
+            if op == "min_datetime":
+                return min(values, key=_datetime_key)
+            if op == "max_datetime":
+                return max(values, key=_datetime_key)
+            if op == "min_int":
+                return min(values)
+            if op == "max_int":
+                return max(values)
+            if op == "sum":
+                return sum(values)
+            if op == "first":
+                return values[0]
+            if op == "last":
+                return values[-1]
             if op == "concat":
                 sep = spec.reduce.get("sep", ", ") if isinstance(spec.reduce, dict) else ", "
                 return sep.join(str(v) for v in values)

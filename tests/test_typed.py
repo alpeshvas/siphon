@@ -181,21 +181,17 @@ class TestProcessSpecReduce:
         return {
             "items": [
                 {"score": 42, "tag": "alpha", "created": "2026-03-15T10:00:00+00:00"},
-                {"score": 7,  "tag": "beta",  "created": "2026-01-01T23:59:00+00:00"},
+                {"score": 7, "tag": "beta", "created": "2026-01-01T23:59:00+00:00"},
                 {"score": 99, "tag": "alpha", "created": "2026-06-30T08:00:00+00:00"},
             ]
         }
 
     def test_reduce_sum(self, scored_data):
-        spec = ExtractSpec(
-            extract={"total": FieldSpec(path="$.items[*].score", reduce="sum")}
-        )
+        spec = ExtractSpec(extract={"total": FieldSpec(path="$.items[*].score", reduce="sum")})
         assert process_spec(spec, scored_data) == {"total": 148}
 
     def test_reduce_max_int(self, scored_data):
-        spec = ExtractSpec(
-            extract={"top": FieldSpec(path="$.items[*].score", reduce="max_int")}
-        )
+        spec = ExtractSpec(extract={"top": FieldSpec(path="$.items[*].score", reduce="max_int")})
         assert process_spec(spec, scored_data) == {"top": 99}
 
     def test_reduce_min_date(self, scored_data):
@@ -205,9 +201,7 @@ class TestProcessSpecReduce:
         assert process_spec(spec, scored_data)["oldest"] == "2026-01-01T23:59:00+00:00"
 
     def test_reduce_distinct(self, scored_data):
-        spec = ExtractSpec(
-            extract={"tags": FieldSpec(path="$.items[*].tag", reduce="distinct")}
-        )
+        spec = ExtractSpec(extract={"tags": FieldSpec(path="$.items[*].tag", reduce="distinct")})
         assert process_spec(spec, scored_data) == {"tags": ["alpha", "beta"]}
 
     def test_reduce_concat_dict_form(self, scored_data):
@@ -222,9 +216,7 @@ class TestProcessSpecReduce:
         assert process_spec(spec, scored_data) == {"tag_str": "alpha | beta | alpha"}
 
     def test_reduce_count_empty(self):
-        spec = ExtractSpec(
-            extract={"n": FieldSpec(path="$.items[*].x", reduce="count")}
-        )
+        spec = ExtractSpec(extract={"n": FieldSpec(path="$.items[*].x", reduce="count")})
         assert process_spec(spec, {"items": []}) == {"n": 0}
 
 

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && uv run ruff check libs tests"
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && uv run ruff format libs tests && uv run ruff check libs tests"
           }
         ]
       },

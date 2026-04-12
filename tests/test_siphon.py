@@ -432,7 +432,7 @@ def dated_items():
     return {
         "items": [
             {"created": "2026-03-15T10:00:00+00:00", "score": 42, "price": 19.99},
-            {"created": "2026-01-01T23:59:00+00:00", "score": 7,  "price": 5.5},
+            {"created": "2026-01-01T23:59:00+00:00", "score": 7, "price": 5.5},
             {"created": "2026-06-30T08:00:00+00:00", "score": 99, "price": 150.0},
         ]
     }
