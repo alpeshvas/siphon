@@ -830,6 +830,11 @@ mark.search-highlight {
       <div class="card-title">Multi-Stage Pipelines</div>
       <div class="card-desc">Chain multiple extraction stages together. Cross-reference data between stages to join sibling arrays -- like SQL joins for JSON.</div>
     </div>
+    <div class="card">
+      <div class="card-icon">&#8721;</div>
+      <div class="card-title">Built-in Aggregation</div>
+      <div class="card-desc">Reduce arrays to a single value without writing any code. Find the earliest time slot, the lowest price, the total stock, or a deduplicated list of categories -- all from the spec.</div>
+    </div>
   </div>
 </section>
 
@@ -928,7 +933,7 @@ mark.search-highlight {
   <div class="feature-panel active" id="tab-process">
     <h3>Simple Extraction</h3>
     <p>The <span class="code-inline">process()</span> API is the quickest way to pull fields from a JSON response. Define paths, optional filters, and optional field renaming -- all in a plain dictionary.</p>
-    <p><strong>When to use it:</strong> You need to grab a few specific fields from an API response and optionally filter an array.</p>
+    <p><strong>When to use it:</strong> You need to grab a few specific fields from an API response, optionally filter an array, or aggregate values (find the minimum, maximum, sum, count, etc.) without writing post-processing code.</p>
     <div class="before-after">
       <div class="before-after-panel">
         <div class="before-after-label before">Raw API Response</div>
@@ -1204,7 +1209,7 @@ result = pipeline([
         <span class="collapsible-arrow">&#9654;</span>
       </button>
       <div class="collapsible-body">
-        <p>Most developers can write their first spec in under five minutes. The <span class="code-inline">process()</span> API requires learning just four concepts: path, where, select, and collect. The advanced <span class="code-inline">query()</span> and <span class="code-inline">pipeline()</span> APIs add more power but follow the same patterns.</p>
+        <p>Most developers can write their first spec in under five minutes. The <span class="code-inline">process()</span> API requires learning just five concepts: path, where, select, collect, and reduce. The advanced <span class="code-inline">query()</span> and <span class="code-inline">pipeline()</span> APIs add more power but follow the same patterns.</p>
       </div>
     </div>
   </div>
@@ -1217,6 +1222,18 @@ result = pipeline([
       </button>
       <div class="collapsible-body">
         <p>That is one of Siphon's design goals. Specs are plain YAML or JSON with no programming constructs. A product manager or data analyst who understands the API response structure can write and modify specs. The Pydantic-typed interface provides validation so errors are caught early with clear messages.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        Can Siphon compute aggregates like minimum price or total count?
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>Yes -- that is what the <span class="code-inline">reduce</span> operator is for. Instead of collecting all values and writing a <span class="code-inline">min()</span> loop yourself, you declare the aggregation in the spec. For example, <span class="code-inline">"reduce": "min_time"</span> finds the item with the earliest time-of-day across all dates, and <span class="code-inline">"reduce": "sum"</span> totals a numeric field. Available operators include <span class="code-inline">min_time</span>, <span class="code-inline">max_time</span>, <span class="code-inline">min_date</span>, <span class="code-inline">max_date</span>, <span class="code-inline">min_datetime</span>, <span class="code-inline">max_datetime</span>, <span class="code-inline">min_int</span>, <span class="code-inline">max_int</span>, <span class="code-inline">sum</span>, <span class="code-inline">count</span>, <span class="code-inline">first</span>, <span class="code-inline">last</span>, <span class="code-inline">concat</span>, and <span class="code-inline">distinct</span>.</p>
       </div>
     </div>
   </div>
@@ -1261,6 +1278,10 @@ result = pipeline([
     <div class="glossary-item">
       <div class="glossary-term">Collect</div>
       <div class="glossary-def">A flag that controls whether Siphon returns just the first match (default) or all matches as a list.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Reduce</div>
+      <div class="glossary-def">An aggregation operator that collapses an array of values into a single result -- the minimum, maximum, sum, count, first occurrence, last occurrence, a joined string, or a deduplicated list. Declared directly in the spec; no post-processing code needed.</div>
     </div>
     <div class="glossary-item">
       <div class="glossary-term">Pipeline</div>

@@ -52,6 +52,21 @@ class TestFieldSpec:
         assert spec.select == {"item_id": "id"}
         assert spec.collect is True
 
+    def test_reduce_defaults_to_none(self):
+        spec = FieldSpec(path="$.data.items[*].price")
+        assert spec.reduce is None
+
+    def test_reduce_string_operator(self):
+        spec = FieldSpec(path="$.data.items[*].price", reduce="min_int")
+        assert spec.reduce == "min_int"
+
+    def test_reduce_dict_form(self):
+        spec = FieldSpec(
+            path="$.tags[*].name",
+            reduce={"op": "concat", "sep": " | "},
+        )
+        assert spec.reduce == {"op": "concat", "sep": " | "}
+
     def test_rejects_extra_fields(self):
         with pytest.raises(ValidationError):
             FieldSpec(path="$.data.id", unknown_field="value")
@@ -160,6 +175,59 @@ class TestProcessSpec:
         ]
 
 
+class TestProcessSpecReduce:
+    @pytest.fixture
+    def scored_data(self):
+        return {
+            "items": [
+                {"score": 42, "tag": "alpha", "created": "2026-03-15T10:00:00+00:00"},
+                {"score": 7,  "tag": "beta",  "created": "2026-01-01T23:59:00+00:00"},
+                {"score": 99, "tag": "alpha", "created": "2026-06-30T08:00:00+00:00"},
+            ]
+        }
+
+    def test_reduce_sum(self, scored_data):
+        spec = ExtractSpec(
+            extract={"total": FieldSpec(path="$.items[*].score", reduce="sum")}
+        )
+        assert process_spec(spec, scored_data) == {"total": 148}
+
+    def test_reduce_max_int(self, scored_data):
+        spec = ExtractSpec(
+            extract={"top": FieldSpec(path="$.items[*].score", reduce="max_int")}
+        )
+        assert process_spec(spec, scored_data) == {"top": 99}
+
+    def test_reduce_min_date(self, scored_data):
+        spec = ExtractSpec(
+            extract={"oldest": FieldSpec(path="$.items[*].created", reduce="min_date")}
+        )
+        assert process_spec(spec, scored_data)["oldest"] == "2026-01-01T23:59:00+00:00"
+
+    def test_reduce_distinct(self, scored_data):
+        spec = ExtractSpec(
+            extract={"tags": FieldSpec(path="$.items[*].tag", reduce="distinct")}
+        )
+        assert process_spec(spec, scored_data) == {"tags": ["alpha", "beta"]}
+
+    def test_reduce_concat_dict_form(self, scored_data):
+        spec = ExtractSpec(
+            extract={
+                "tag_str": FieldSpec(
+                    path="$.items[*].tag",
+                    reduce={"op": "concat", "sep": " | "},
+                )
+            }
+        )
+        assert process_spec(spec, scored_data) == {"tag_str": "alpha | beta | alpha"}
+
+    def test_reduce_count_empty(self):
+        spec = ExtractSpec(
+            extract={"n": FieldSpec(path="$.items[*].x", reduce="count")}
+        )
+        assert process_spec(spec, {"items": []}) == {"n": 0}
+
+
 class TestModelDump:
     def test_field_spec_dumps_correctly(self):
         spec = FieldSpec(
@@ -174,6 +242,21 @@ class TestModelDump:
             "collect": True,
         }
         assert "select" not in dumped
+
+    def test_field_spec_dumps_reduce_string(self):
+        spec = FieldSpec(path="$.items[*].price", reduce="sum")
+        dumped = spec.model_dump(exclude_none=True)
+        assert dumped == {"path": "$.items[*].price", "collect": False, "reduce": "sum"}
+
+    def test_field_spec_dumps_reduce_dict(self):
+        spec = FieldSpec(path="$.tags[*].name", reduce={"op": "concat", "sep": " | "})
+        dumped = spec.model_dump(exclude_none=True)
+        assert dumped["reduce"] == {"op": "concat", "sep": " | "}
+
+    def test_field_spec_omits_reduce_when_none(self):
+        spec = FieldSpec(path="$.data.id")
+        dumped = spec.model_dump(exclude_none=True)
+        assert "reduce" not in dumped
 
     def test_extract_spec_dumps_correctly(self):
         spec = ExtractSpec(

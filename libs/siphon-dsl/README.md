@@ -65,6 +65,7 @@ Output:
 | **Ancestor filtering** | `where: {parentId: 123}` | Filter by parent-level properties |
 | **Projection** | `select: {new: "old"}` | Rename and reshape fields |
 | **Collect** | `collect: true` | Return all matches (default: first only) |
+| **Reduce** | `reduce: "min_time"` | Aggregate array values to a single result |
 
 ## Spec Format
 
@@ -83,6 +84,45 @@ extract:
     where: {status: "active"}
     select: {item_id: "id", item_name: "name"}
     collect: true
+```
+
+### Reduce (aggregation)
+```yaml
+extract:
+  earliest_slot:
+    path: "$.items[*].from_datetime"
+    reduce: min_time          # earliest time-of-day across all items
+
+  latest_slot:
+    path: "$.items[*].to_datetime"
+    reduce: max_time          # latest time-of-day across all items
+
+  total_price:
+    path: "$.items[*].price"
+    reduce: sum
+
+  unique_categories:
+    path: "$.items[*].category"
+    reduce: distinct
+```
+
+Available operators:
+
+| Operator | Description |
+|---|---|
+| `min_time` / `max_time` | Earliest/latest time-of-day (ignores date + timezone) |
+| `min_date` / `max_date` | Earliest/latest calendar date (ignores time) |
+| `min_datetime` / `max_datetime` | Earliest/latest full datetime (timezone-normalised) |
+| `min_int` / `max_int` | Minimum/maximum numeric value |
+| `sum` | Sum of numeric values |
+| `count` | Count of non-null values (returns `0` for empty) |
+| `first` / `last` | First or last value in traversal order |
+| `concat` | Join values as a string (default separator `", "`) |
+| `distinct` | Deduplicated list, preserving first-seen order |
+
+For `concat` with a custom separator use the dict form:
+```python
+"reduce": {"op": "concat", "sep": " | "}
 ```
 
 ## Fetch from API
@@ -137,7 +177,7 @@ pip install siphon-dsl[typed]
 
 ## Spec History
 
-See [specs/](specs/) for version history and full documentation.
+See [specs/](specs/) for version history and full documentation. Latest: [v0.8](../../specs/v0.8.md) — adds `reduce` aggregation operators.
 
 ## License
 

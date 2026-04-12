@@ -426,6 +426,7 @@ tr:hover td { background: rgba(108,138,255,0.04); }
     <a href="#process-select" class="sidebar-link sub">Projection</a>
     <a href="#process-collect" class="sidebar-link sub">Collect</a>
     <a href="#process-ancestors" class="sidebar-link sub">Ancestor Filtering</a>
+    <a href="#process-reduce" class="sidebar-link sub">Reduce</a>
     <a href="#query-api" class="sidebar-link">query()</a>
     <a href="#query-filters" class="sidebar-link sub">Filter Operators</a>
     <a href="#query-sort" class="sidebar-link sub">Sort &amp; Pagination</a>
@@ -652,7 +653,8 @@ JSON data    <span class="arrow">--&gt;</span>  Path Resolution          <span c
     path: <span class="fn">str</span>                    <span class="cm"># Required: JSONPath expression</span>
     where: <span class="fn">dict</span> | <span class="num">None</span> = <span class="num">None</span>    <span class="cm"># Optional: filter conditions</span>
     select: <span class="fn">dict</span> | <span class="num">None</span> = <span class="num">None</span>   <span class="cm"># Optional: field projection/renaming</span>
-    collect: <span class="fn">bool</span> = <span class="num">False</span>        <span class="cm"># Optional: return all matches</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+    collect: <span class="fn">bool</span> = <span class="num">False</span>        <span class="cm"># Optional: return all matches</span>
+    reduce: <span class="fn">str</span> | <span class="fn">dict</span> | <span class="num">None</span> = <span class="num">None</span>  <span class="cm"># Optional: aggregate to single value</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
   </div>
 </section>
 
@@ -727,6 +729,46 @@ result = process(spec, data)  <span class="cm"># returns dict</span></code><butt
     <h3>How ancestor context works</h3>
     <p style="margin-bottom:0;">As Siphon traverses nested arrays, it merges properties from each level into a context. If the same property name exists at multiple levels, the <strong>innermost value wins</strong>.</p>
   </div>
+
+  <h3 id="process-reduce">Aggregation with <code>reduce</code> <span class="tag tag-new">v0.8+</span></h3>
+  <p>Instead of collecting all values and post-processing in application code, <code>reduce</code> collapses an array path into a single computed result. It is mutually exclusive with <code>collect</code>.</p>
+
+  <pre><code><span class="cm"># Earliest time-of-day across items on any date (timezone ignored)</span>
+<span class="str">"earliest_slot"</span>: {
+    <span class="str">"path"</span>: <span class="str">"$.data.items[*].availability_from_date_time"</span>,
+    <span class="str">"reduce"</span>: <span class="str">"min_time"</span>
+}
+
+<span class="cm"># Sum of all prices</span>
+<span class="str">"total"</span>: {
+    <span class="str">"path"</span>: <span class="str">"$.products[*].price"</span>,
+    <span class="str">"reduce"</span>: <span class="str">"sum"</span>
+}
+
+<span class="cm"># Deduplicated list of categories</span>
+<span class="str">"categories"</span>: {
+    <span class="str">"path"</span>: <span class="str">"$.products[*].category"</span>,
+    <span class="str">"reduce"</span>: <span class="str">"distinct"</span>
+}
+
+<span class="cm"># Concat with a custom separator (dict form)</span>
+<span class="str">"tag_list"</span>: {
+    <span class="str">"path"</span>: <span class="str">"$.tags[*].name"</span>,
+    <span class="str">"reduce"</span>: {<span class="str">"op"</span>: <span class="str">"concat"</span>, <span class="str">"sep"</span>: <span class="str">" | "</span>}
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+  <table>
+    <tr><th>Operator</th><th>Input type</th><th>Description</th></tr>
+    <tr><td><code>min_time</code> / <code>max_time</code></td><td>ISO 8601 datetime</td><td>Earliest/latest <strong>time-of-day</strong> — ignores date and timezone</td></tr>
+    <tr><td><code>min_date</code> / <code>max_date</code></td><td>ISO 8601 datetime/date</td><td>Earliest/latest <strong>calendar date</strong> — ignores time</td></tr>
+    <tr><td><code>min_datetime</code> / <code>max_datetime</code></td><td>ISO 8601 datetime</td><td>Earliest/latest <strong>full datetime</strong>, timezone-normalised</td></tr>
+    <tr><td><code>min_int</code> / <code>max_int</code></td><td>number</td><td>Minimum/maximum numeric value (int or float)</td></tr>
+    <tr><td><code>sum</code></td><td>number</td><td>Sum of all values</td></tr>
+    <tr><td><code>count</code></td><td>any</td><td>Count of non-null values — returns <code>0</code> for empty (not <code>None</code>)</td></tr>
+    <tr><td><code>first</code> / <code>last</code></td><td>any</td><td>First or last value in traversal order</td></tr>
+    <tr><td><code>concat</code></td><td>string</td><td>Join as string, default sep <code>", "</code>. Use <code>{"op":"concat","sep":"..."}</code> for custom</td></tr>
+    <tr><td><code>distinct</code></td><td>any</td><td>Deduplicated list, preserving first-seen order</td></tr>
+  </table>
 </section>
 
 <!-- query() API -->
@@ -1081,6 +1123,18 @@ result = fetch_and_process(spec, <span class="str">"https://api.store.com"</span
     <li>Dot notation supported in source paths: <code>{"cost": "pricing.amount"}</code></li>
     <li>Missing fields become <code>None</code></li>
   </ul>
+
+  <h3>Reduce Return Values</h3>
+  <table>
+    <tr><th>Operator</th><th>Empty array returns</th><th>Non-empty returns</th></tr>
+    <tr><td>All <code>min_*</code> / <code>max_*</code></td><td><code>None</code></td><td>The matching value (original string/number, not key)</td></tr>
+    <tr><td><code>sum</code></td><td><code>None</code></td><td>Numeric sum</td></tr>
+    <tr><td><code>first</code> / <code>last</code></td><td><code>None</code></td><td>First or last element</td></tr>
+    <tr><td><code>concat</code></td><td><code>None</code></td><td>Joined string</td></tr>
+    <tr><td><code>distinct</code></td><td><code>None</code></td><td>List with duplicates removed</td></tr>
+    <tr><td><code>count</code></td><td><code>0</code></td><td>Integer count of non-null values</td></tr>
+  </table>
+  <p style="margin-top: 8px; color: var(--text-dim); font-size: 13px;"><code>reduce</code> and <code>where</code> can be combined — <code>where</code> filters first, then <code>reduce</code> aggregates the matching values.</p>
 </section>
 
 <!-- Project Structure -->
