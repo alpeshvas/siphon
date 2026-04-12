@@ -18,8 +18,8 @@ uv run pytest
 # Run a single test
 uv run pytest tests/test_siphon.py::TestClassName::test_method_name
 
-# Lint
-uv run ruff check libs tests
+# Format + lint (run together; format first to avoid fixable errors)
+uv run ruff format libs tests && uv run ruff check libs tests
 
 # Build the package
 uv build --package siphon-dsl
