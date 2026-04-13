@@ -165,39 +165,19 @@ class TestEvalFilter:
 
     # Logical operators
     def test_and_all_true(self, sample_item):
-        where = {
-            "$and": [
-                {"status": "active"},
-                {"id": {"$gt": 0}}
-            ]
-        }
+        where = {"$and": [{"status": "active"}, {"id": {"$gt": 0}}]}
         assert eval_filter(where, sample_item)
 
     def test_and_one_false(self, sample_item):
-        where = {
-            "$and": [
-                {"status": "active"},
-                {"id": {"$gt": 10}}
-            ]
-        }
+        where = {"$and": [{"status": "active"}, {"id": {"$gt": 10}}]}
         assert not eval_filter(where, sample_item)
 
     def test_or_one_true(self, sample_item):
-        where = {
-            "$or": [
-                {"status": "inactive"},
-                {"id": {"$gt": 0}}
-            ]
-        }
+        where = {"$or": [{"status": "inactive"}, {"id": {"$gt": 0}}]}
         assert eval_filter(where, sample_item)
 
     def test_or_all_false(self, sample_item):
-        where = {
-            "$or": [
-                {"status": "inactive"},
-                {"id": {"$gt": 10}}
-            ]
-        }
+        where = {"$or": [{"status": "inactive"}, {"id": {"$gt": 10}}]}
         assert not eval_filter(where, sample_item)
 
     def test_not_negates_true(self, sample_item):
@@ -209,59 +189,28 @@ class TestEvalFilter:
         assert eval_filter(where, sample_item)
 
     def test_nor_none_match(self, sample_item):
-        where = {
-            "$nor": [
-                {"status": "inactive"},
-                {"id": {"$lt": 0}}
-            ]
-        }
+        where = {"$nor": [{"status": "inactive"}, {"id": {"$lt": 0}}]}
         assert eval_filter(where, sample_item)
 
     def test_nor_one_matches(self, sample_item):
-        where = {
-            "$nor": [
-                {"status": "active"},
-                {"id": {"$lt": 0}}
-            ]
-        }
+        where = {"$nor": [{"status": "active"}, {"id": {"$lt": 0}}]}
         assert not eval_filter(where, sample_item)
 
     # Complex nested logical
     def test_and_with_operators(self, sample_item):
-        where = {
-            "$and": [
-                {"price.amount": {"$gt": 50}},
-                {"price.amount": {"$lt": 150}}
-            ]
-        }
+        where = {"$and": [{"price.amount": {"$gt": 50}}, {"price.amount": {"$lt": 150}}]}
         assert eval_filter(where, sample_item)
 
     def test_nested_logical_and_or(self, sample_item):
-        where = {
-            "$and": [
-                {"status": "active"},
-                {
-                    "$or": [
-                        {"id": 1},
-                        {"id": 2}
-                    ]
-                }
-            ]
-        }
+        where = {"$and": [{"status": "active"}, {"$or": [{"id": 1}, {"id": 2}]}]}
         assert eval_filter(where, sample_item)
 
     # Multiple field conditions (implicit AND)
     def test_multiple_fields_implicit_and(self, sample_item):
         """Multiple top-level keys act as AND."""
-        where = {
-            "status": "active",
-            "id": {"$gt": 0}
-        }
+        where = {"status": "active", "id": {"$gt": 0}}
         assert eval_filter(where, sample_item)
 
     def test_multiple_fields_one_fails(self, sample_item):
-        where = {
-            "status": "active",
-            "id": {"$gt": 10}
-        }
+        where = {"status": "active", "id": {"$gt": 10}}
         assert not eval_filter(where, sample_item)

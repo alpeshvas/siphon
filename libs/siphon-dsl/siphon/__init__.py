@@ -8,6 +8,9 @@ Supports (legacy flat API):
 - Ancestor filtering: `where` can match properties from any parent level
 - Field projection/renaming with `select`
 - Collect all matches with `collect: true`
+- Aggregation with `reduce`: min_time, max_time, min_date, max_date,
+  min_datetime, max_datetime, min_int, max_int, sum, count, first, last,
+  concat, distinct
 
 Supports (chaining API v0.6.0+):
 - Hierarchical multi-level extraction with "then" chaining
@@ -34,6 +37,7 @@ class FieldSpec:
     where: dict | None = None
     select: dict | None = None
     collect: bool = False
+    reduce: str | dict | None = None
 
 
 def parse_field(value) -> FieldSpec:
@@ -44,6 +48,7 @@ def parse_field(value) -> FieldSpec:
         where=value.get("where"),
         select=value.get("select"),
         collect=value.get("collect", False),
+        reduce=value.get("reduce"),
     )
 
 
@@ -100,11 +105,88 @@ def project(item: dict, select: dict) -> dict:
     return {new_name: get_by_path(item, old_path) for new_name, old_path in select.items()}
 
 
+def _time_key(dt_str: str) -> tuple:
+    """Return (H, M, S) from an ISO 8601 datetime string, ignoring date and timezone."""
+    if not dt_str or "T" not in dt_str:
+        return (0, 0, 0)
+    time_part = dt_str.split("T")[1]
+    # Strip timezone: +HH:MM, -HH:MM, or Z
+    for sep in ("+", "-", "Z"):
+        idx = time_part.find(sep)
+        if idx != -1:
+            time_part = time_part[:idx]
+            break
+    parts = time_part.split(":")
+    return tuple(int(p) for p in parts[:3])
+
+
+def _date_key(dt_str: str) -> tuple:
+    """Return (Y, M, D) from an ISO 8601 datetime or date string, ignoring time."""
+    if not dt_str:
+        return (0, 0, 0)
+    date_part = dt_str.split("T")[0]
+    parts = date_part.split("-")
+    return tuple(int(p) for p in parts[:3])
+
+
+def _datetime_key(dt_str: str):
+    """Return a timezone-aware datetime for full ISO 8601 comparison across timezones."""
+    from datetime import datetime
+
+    return datetime.fromisoformat(dt_str)
+
+
 class Extractor:
     def extract(self, spec: FieldSpec, data: dict) -> Any:
         # Simple path, no array iteration
         if "[*]" not in spec.path:
             return get_by_path(data, spec.path.lstrip("$."))
+
+        # Reduce: aggregate all values with a named operator
+        if spec.reduce:
+            op = spec.reduce if isinstance(spec.reduce, str) else spec.reduce["op"]
+            values = [v for _, v in extract_all(data, spec.path) if v is not None]
+
+            # count is the only op that has a meaningful result for empty arrays
+            if op == "count":
+                return len(values)
+
+            if not values:
+                return None
+
+            if op == "min_time":
+                return min(values, key=_time_key)
+            if op == "max_time":
+                return max(values, key=_time_key)
+            if op == "min_date":
+                return min(values, key=_date_key)
+            if op == "max_date":
+                return max(values, key=_date_key)
+            if op == "min_datetime":
+                return min(values, key=_datetime_key)
+            if op == "max_datetime":
+                return max(values, key=_datetime_key)
+            if op == "min_int":
+                return min(values)
+            if op == "max_int":
+                return max(values)
+            if op == "sum":
+                return sum(values)
+            if op == "first":
+                return values[0]
+            if op == "last":
+                return values[-1]
+            if op == "concat":
+                sep = spec.reduce.get("sep", ", ") if isinstance(spec.reduce, dict) else ", "
+                return sep.join(str(v) for v in values)
+            if op == "distinct":
+                seen: set = set()
+                result = []
+                for v in values:
+                    if v not in seen:
+                        seen.add(v)
+                        result.append(v)
+                return result
 
         results = []
         for item, value in extract_all(data, spec.path):

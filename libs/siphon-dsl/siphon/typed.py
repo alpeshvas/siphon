@@ -44,6 +44,21 @@ class FieldSpec(BaseModel):
     collect: bool = False
     """If True, return all matches. If False, return first match only."""
 
+    reduce: str | dict[str, Any] | None = None
+    """
+    Aggregate all matched values to a single result.
+    Accepts a plain operator name or a dict with 'op' and options.
+
+    String operators: min_time, max_time, min_date, max_date, min_datetime,
+    max_datetime, min_int, max_int, sum, count, first, last, concat, distinct
+
+    Dict form (for operators with options):
+        {"op": "concat", "sep": " | "}
+
+    Mutually exclusive with collect. Returns None for empty arrays,
+    except count which returns 0.
+    """
+
 
 class RequestSpec(BaseModel):
     """Specification for API request (used with fetch_and_process)."""

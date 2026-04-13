@@ -6,7 +6,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && uv run ruff check libs tests"
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && uv run ruff format libs tests && uv run ruff check libs tests"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && case \"$CLAUDE_TOOL_INPUT\" in *.py*) uv run pytest --tb=short -q ;; esac"
           }
         ]
       }

@@ -18,8 +18,8 @@ uv run pytest
 # Run a single test
 uv run pytest tests/test_siphon.py::TestClassName::test_method_name
 
-# Lint
-uv run ruff check libs tests
+# Format + lint (run together; format first to avoid fixable errors)
+uv run ruff format libs tests && uv run ruff check libs tests
 
 # Build the package
 uv build --package siphon-dsl
@@ -53,4 +53,57 @@ Internal structure in `siphon/__init__.py`:
 Specs use JSONPath-like syntax:
 - Simple: `"$.data.id"` - extract nested values
 - Arrays: `"$.items[*].name"` - iterate with `[*]`
-- Extended: `{path, where, select, collect}` - filtering and projection
+- Extended: `{path, where, select, collect, reduce}` - filtering, projection, and aggregation
+
+---
+
+## Development Workflow
+
+### TDD (mandatory for all code changes)
+
+1. **Write the test first** — define input, expected output, and edge cases before touching implementation. Group tests in a class matching the feature (e.g. `TestReduceSumCount`).
+2. **Run new tests and confirm they fail** — `uv run pytest <test_path> -v`. This proves the test actually exercises the new code path.
+3. **Implement** — minimum change to make the tests pass.
+4. **Run the full suite** — `uv run pytest`. Confirm no regressions.
+
+Never write implementation before a failing test exists. Never skip the failure-confirmation step.
+
+---
+
+### After adding or changing a feature — checklist
+
+Every feature change must propagate through **all** of the following layers. Do not skip any.
+
+#### 1. Core implementation (`libs/siphon-dsl/siphon/__init__.py`)
+- Update `FieldSpec` dataclass if new fields are introduced
+- Update `parse_field()` to handle the new field
+- Implement logic in `Extractor.extract()` or an appropriate helper
+
+#### 2. Typed spec (`libs/siphon-dsl/siphon/typed.py`)
+- Mirror any new `FieldSpec` fields in the Pydantic `FieldSpec` model
+- Include a docstring explaining accepted values
+- `extra="forbid"` means omitting a field causes a `ValidationError` — always keep in sync
+- Add tests in `tests/test_typed.py` covering: field default, string form, dict form, `model_dump` serialisation, and end-to-end `process_spec`
+
+#### 3. Spec version doc (`specs/`)
+- Create a new `specs/vX.Y.md` for the new version (e.g. `specs/v0.8.md`)
+- Follow the structure of `specs/v0.5.md`: Overview, FieldSpec Schema, feature sections with examples, Behavior Reference, Changes from vX.Y-1
+- Move the old `specs/vX.Y.md` to `specs/history/` only when a newer version fully supersedes it
+- The current latest spec file stays at the root of `specs/`
+
+#### 4. README (`libs/siphon-dsl/README.md`)
+- Add the new feature to the Features table
+- Add a concise section under "Spec Format" with YAML/Python examples
+- Update the Spec History link to point to the latest spec version
+
+#### 5. Developer docs (`docs/index.html`)
+- Add a sidebar nav entry (sub-link under the relevant API section)
+- Update the FieldSpec schema tab to show the new field
+- Add a new `<h3>` subsection with code examples and an operator/behaviour table
+- Add to the Behavior Reference section if return-value semantics change
+
+#### 6. PM/overview docs (`docs/index-pm.html`)
+- Add a Key Benefits card if the feature is user-facing and significant
+- Update the relevant feature tab (`tab-process`, etc.) — "When to use it" blurb
+- Add a FAQ entry (collapsible) for the feature
+- Add a Glossary entry
