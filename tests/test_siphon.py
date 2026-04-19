@@ -427,6 +427,55 @@ class TestReduceTimeOp:
         assert process(spec, {"items": []}) == {"val": None}
 
 
+class TestReduceTimePlainStrings:
+    """min_time / max_time with plain HH:MM and HH:MM:SS strings (no date, no T)."""
+
+    def _data(self, times):
+        return {"items": [{"t": t} for t in times]}
+
+    def test_min_time_hhmm(self):
+        data = self._data(["09:00", "18:00", "14:30"])
+        spec = {"extract": {"opening": {"path": "$.items[*].t", "reduce": "min_time"}}}
+        assert process(spec, data)["opening"] == "09:00"
+
+    def test_max_time_hhmm(self):
+        data = self._data(["09:00", "18:00", "14:30"])
+        spec = {"extract": {"closing": {"path": "$.items[*].t", "reduce": "max_time"}}}
+        assert process(spec, data)["closing"] == "18:00"
+
+    def test_min_time_hhmmss(self):
+        data = self._data(["09:00:00", "18:00:00", "14:30:45"])
+        spec = {"extract": {"opening": {"path": "$.items[*].t", "reduce": "min_time"}}}
+        assert process(spec, data)["opening"] == "09:00:00"
+
+    def test_max_time_hhmmss(self):
+        data = self._data(["09:00:00", "18:00:00", "14:30:45"])
+        spec = {"extract": {"closing": {"path": "$.items[*].t", "reduce": "max_time"}}}
+        assert process(spec, data)["closing"] == "18:00:00"
+
+    def test_min_time_iso_datetime_unchanged(self):
+        """ISO datetime strings with T still work correctly."""
+        data = self._data(
+            ["2026-04-12T09:15:00+04:00", "2026-04-11T13:30:00+04:00", "2026-04-13T14:00:00+04:00"]
+        )
+        spec = {"extract": {"opening": {"path": "$.items[*].t", "reduce": "min_time"}}}
+        assert process(spec, data)["opening"] == "2026-04-12T09:15:00+04:00"
+
+    def test_max_time_iso_datetime_unchanged(self):
+        """ISO datetime strings with T still work correctly."""
+        data = self._data(
+            ["2026-04-12T09:15:00+04:00", "2026-04-11T22:00:00+04:00", "2026-04-13T14:00:00+04:00"]
+        )
+        spec = {"extract": {"closing": {"path": "$.items[*].t", "reduce": "max_time"}}}
+        assert process(spec, data)["closing"] == "2026-04-11T22:00:00+04:00"
+
+    def test_time_key_empty_string_returns_zero_tuple(self):
+        """Empty string falls back to (0,0,0) so it sorts last on min."""
+        from siphon import _time_key
+
+        assert _time_key("") == (0, 0, 0)
+
+
 @pytest.fixture
 def dated_items():
     return {

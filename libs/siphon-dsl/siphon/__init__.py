@@ -106,9 +106,15 @@ def project(item: dict, select: dict) -> dict:
 
 
 def _time_key(dt_str: str) -> tuple:
-    """Return (H, M, S) from an ISO 8601 datetime string, ignoring date and timezone."""
-    if not dt_str or "T" not in dt_str:
-        return (0, 0, 0)
+    """Return (H, M, S) from an ISO 8601 datetime or plain HH:MM / HH:MM:SS string."""
+    if not dt_str:
+        return 0, 0, 0
+    if "T" not in dt_str:
+        parts = dt_str.split(":")
+        h = int(parts[0]) if len(parts) > 0 else 0
+        m = int(parts[1]) if len(parts) > 1 else 0
+        s = int(parts[2]) if len(parts) > 2 else 0
+        return h, m, s
     time_part = dt_str.split("T")[1]
     # Strip timezone: +HH:MM, -HH:MM, or Z
     for sep in ("+", "-", "Z"):
