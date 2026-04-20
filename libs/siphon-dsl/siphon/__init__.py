@@ -28,7 +28,7 @@ Supports (pipeline API v0.7.0+):
 from dataclasses import dataclass
 from typing import Any
 
-__version__ = "0.9.0b1"
+__version__ = "0.9.0"
 
 
 @dataclass
