@@ -1,6 +1,6 @@
 [project]
 name = "siphon-dsl"
-version = "0.8.0"
+version = "0.9.0b1"
 description = "Minimal DSL for API data extraction"
 readme = "README.md"
 license = {text = "MIT"}
