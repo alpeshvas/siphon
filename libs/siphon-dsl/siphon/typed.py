@@ -39,7 +39,12 @@ class FieldSpec(BaseModel):
     """Filter conditions - item must match all key-value pairs"""
 
     select: dict[str, str] | None = None
-    """Field projection/renaming: {new_name: old_path}"""
+    """Field projection/renaming: {new_name: old_path}
+
+    A path string may contain `||` to coalesce — paths are tried
+    left-to-right and the first one resolving to a non-None value wins.
+    Example: `{"price": "sale_price || list_price"}`.
+    """
 
     collect: bool = False
     """If True, return all matches. If False, return first match only."""
@@ -51,6 +56,9 @@ class FieldSpec(BaseModel):
 
     String operators: min_time, max_time, min_date, max_date, min_datetime,
     max_datetime, min_int, max_int, sum, count, first, last, concat, distinct
+
+    min_time/max_time accept ISO 8601 datetime strings or plain HH:MM /
+    HH:MM:SS strings; date and timezone are ignored.
 
     Dict form (for operators with options):
         {"op": "concat", "sep": " | "}
@@ -130,7 +138,10 @@ class ChainSpec(BaseModel):
     """MongoDB-style filter conditions for matching items at this level"""
 
     select: dict[str, str] | None = None
-    """Field projection/renaming: {output_name: source_path}"""
+    """Field projection/renaming: {output_name: source_path}
+
+    A path string may contain `||` to coalesce — first non-None segment wins.
+    """
 
     sort: list[SortSpec] | None = None
     """Sort specifications for items at this level (before then recursion)"""

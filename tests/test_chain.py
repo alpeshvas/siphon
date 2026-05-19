@@ -460,3 +460,233 @@ class TestLimitOffset:
         result = query(spec, prices)
         assert len(result) == 1
         assert result[0]["price"] == 100
+
+
+class TestChainSelectCoalesce:
+    """`||` coalesce in chain query select values."""
+
+    def test_terminal_select_coalesce(self):
+        data = {
+            "items": [
+                {"id": 1, "primary": None, "backup": "B1"},
+                {"id": 2, "primary": "P2", "backup": "B2"},
+            ]
+        }
+        spec = {
+            "from": "$.items[*]",
+            "select": {"id": "id", "v": "primary || backup"},
+            "collect": True,
+        }
+        result = query(spec, data)
+        assert result == [{"id": 1, "v": "B1"}, {"id": 2, "v": "P2"}]
+
+    def test_intermediate_select_coalesce_carries_forward(self):
+        data = {
+            "groups": [
+                {
+                    "label_a": None,
+                    "label_b": "fallback",
+                    "items": [{"name": "x"}],
+                }
+            ]
+        }
+        spec = {
+            "from": "$.groups[*]",
+            "select": {"label": "label_a || label_b"},
+            "then": {"from": "items[*]", "select": {"name": "name"}, "collect": True},
+        }
+        result = query(spec, data)
+        assert result == [{"label": "fallback", "name": "x"}]
+
+
+class TestRealWorldTieredPricingCoalesce:
+    """Real-world Bokun-shaped pricing payload: per-passenger base tier with coalesce."""
+
+    @pytest.fixture
+    def tiered_pricing_data(self):
+        return {
+            "activityId": 954367,
+            "isPriceConverted": True,
+            "defaultCurrency": "MYR",
+            "pricesByDateRange": [
+                {
+                    "from": "2026-05-19",
+                    "to": "2027-05-19",
+                    "rates": [
+                        {
+                            "rateId": 1847374,
+                            "title": "Website",
+                            "passengers": [
+                                {
+                                    "pricingCategoryId": 715106,
+                                    "title": "Adult",
+                                    "ticketCategory": "ADULT",
+                                    "tieredPrices": [
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 64.51,
+                                            "minPassengersRequired": 2,
+                                            "maxPassengersRequired": 2,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 30.7,
+                                            "minPassengersRequired": 5,
+                                            "maxPassengersRequired": 5,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 43.83,
+                                            "minPassengersRequired": 3,
+                                            "maxPassengersRequired": 3,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 32.26,
+                                            "minPassengersRequired": 9,
+                                            "maxPassengersRequired": 9,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 25.59,
+                                            "minPassengersRequired": 12,
+                                            "maxPassengersRequired": 12,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 35.6,
+                                            "minPassengersRequired": 4,
+                                            "maxPassengersRequired": 4,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 30.04,
+                                            "minPassengersRequired": 10,
+                                            "maxPassengersRequired": 10,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 28.03,
+                                            "minPassengersRequired": 6,
+                                            "maxPassengersRequired": 6,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 28.03,
+                                            "minPassengersRequired": 7,
+                                            "maxPassengersRequired": 7,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 34.48,
+                                            "minPassengersRequired": 8,
+                                            "maxPassengersRequired": 8,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 27.81,
+                                            "minPassengersRequired": 11,
+                                            "maxPassengersRequired": 11,
+                                        },
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 129.02,
+                                            "minPassengersRequired": 1,
+                                            "maxPassengersRequired": 1,
+                                        },
+                                    ],
+                                    "extras": [],
+                                },
+                                {
+                                    "pricingCategoryId": 715107,
+                                    "title": "Infant",
+                                    "ticketCategory": "INFANT",
+                                    "tieredPrices": [
+                                        {
+                                            "currency": "EUR",
+                                            "amount": 0.0,
+                                            "minPassengersRequired": 1,
+                                            "maxPassengersRequired": 2,
+                                        },
+                                    ],
+                                    "extras": [],
+                                },
+                            ],
+                            "extras": [],
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_base_tier_per_passenger_with_coalesce_fallbacks(self, tiered_pricing_data):
+        """
+        For each passenger under a rate, take the lowest-minPassengersRequired
+        tiered price as the base price. Use coalesce on `label` (fall back to
+        `title` when a custom label is absent) and on `amount` (fall back to
+        the tiered `amount` when no explicit amount exists on the price).
+        """
+        spec = {
+            "from": "$.pricesByDateRange[*].rates[*]",
+            "where": {"rateId": 1847374},
+            "collect": True,
+            "then": {
+                "from": "passengers[*]",
+                "collect": True,
+                "select": {
+                    "pricingCategoryId": "pricingCategoryId",
+                    "label": "customLabel || title",
+                    "ticketCategory": "ticketCategory",
+                },
+                "then": {
+                    "from": "tieredPrices[*]",
+                    "sort": [{"field": "minPassengersRequired", "order": "asc"}],
+                    "limit": 1,
+                    "collect": False,
+                    "select": {
+                        "amount": "overrideAmount || amount",
+                        "currency": "currency",
+                    },
+                },
+            },
+        }
+        result = query(spec, tiered_pricing_data)
+        assert result == [
+            {
+                "pricingCategoryId": 715106,
+                "label": "Adult",
+                "ticketCategory": "ADULT",
+                "amount": 129.02,
+                "currency": "EUR",
+            },
+            {
+                "pricingCategoryId": 715107,
+                "label": "Infant",
+                "ticketCategory": "INFANT",
+                "amount": 0.0,
+                "currency": "EUR",
+            },
+        ]
+
+    def test_coalesce_first_path_wins_when_present(self, tiered_pricing_data):
+        """If the first coalesce path resolves to non-None, later paths are ignored."""
+        # Inject a customLabel on the Adult passenger
+        tiered_pricing_data["pricesByDateRange"][0]["rates"][0]["passengers"][0]["customLabel"] = (
+            "Grown-up"
+        )
+        spec = {
+            "from": "$.pricesByDateRange[*].rates[*].passengers[*]",
+            "where": {"pricingCategoryId": 715106},
+            "select": {"label": "customLabel || title"},
+        }
+        # Multi-star `from` decomposes into nested chain stages, so the outer
+        # level is intermediate and returns a list of matches.
+        assert query(spec, tiered_pricing_data) == [{"label": "Grown-up"}]
+
+    def test_coalesce_returns_none_when_every_path_missing(self, tiered_pricing_data):
+        spec = {
+            "from": "$.pricesByDateRange[*].rates[*].passengers[*]",
+            "where": {"pricingCategoryId": 715107},
+            "select": {"label": "customLabel || fallbackLabel"},
+        }
+        assert query(spec, tiered_pricing_data) == [{"label": None}]

@@ -260,3 +260,30 @@ class TestModelDump:
         dumped = spec.model_dump(exclude_none=True)
         assert dumped["extract"]["id"] == "$.data.id"
         assert dumped["extract"]["items"]["path"] == "$.data.items[*]"
+
+
+class TestFieldSpecCoalesce:
+    def test_select_accepts_pipe_string(self):
+        spec = FieldSpec(
+            path="$.items[*]",
+            select={"v": "a || b"},
+            collect=True,
+        )
+        assert spec.select == {"v": "a || b"}
+
+    def test_process_spec_coalesces(self):
+        data = {"items": [{"a": None, "b": "fallback"}]}
+        spec = ExtractSpec(
+            extract={
+                "out": FieldSpec(
+                    path="$.items[*]",
+                    select={"v": "a || b"},
+                )
+            }
+        )
+        assert process_spec(spec, data) == {"out": {"v": "fallback"}}
+
+    def test_select_dump_preserves_pipe_string(self):
+        spec = FieldSpec(path="$.items[*]", select={"v": "a || b"})
+        dumped = spec.model_dump(exclude_none=True)
+        assert dumped["select"] == {"v": "a || b"}

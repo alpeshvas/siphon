@@ -804,3 +804,74 @@ class TestBokunPriceList:
                 "currency": "EUR",
             },
         ]
+
+
+class TestSelectCoalesce:
+    """select values may contain `||` to coalesce: first non-None path wins."""
+
+    def test_coalesce_picks_first_non_null(self):
+        data = {"items": [{"a": None, "b": "fallback"}]}
+        spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "a || b"}}}}
+        assert process(spec, data) == {"out": {"v": "fallback"}}
+
+    def test_coalesce_picks_first_when_present(self):
+        data = {"items": [{"a": "primary", "b": "fallback"}]}
+        spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "a || b"}}}}
+        assert process(spec, data) == {"out": {"v": "primary"}}
+
+    def test_coalesce_returns_none_when_all_missing(self):
+        data = {"items": [{"x": 1}]}
+        spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "a || b"}}}}
+        assert process(spec, data) == {"out": {"v": None}}
+
+    def test_coalesce_with_nested_paths(self):
+        data = {"items": [{"primary": {"amount": None}, "backup": {"amount": 42}}]}
+        spec = {
+            "extract": {
+                "out": {
+                    "path": "$.items[*]",
+                    "select": {"amount": "primary.amount || backup.amount"},
+                }
+            }
+        }
+        assert process(spec, data) == {"out": {"amount": 42}}
+
+    def test_coalesce_with_collect(self):
+        data = {
+            "items": [
+                {"a": "x", "b": "X"},
+                {"a": None, "b": "Y"},
+                {"a": None, "b": None},
+            ]
+        }
+        spec = {
+            "extract": {
+                "out": {
+                    "path": "$.items[*]",
+                    "select": {"v": "a || b"},
+                    "collect": True,
+                }
+            }
+        }
+        assert process(spec, data) == {"out": [{"v": "x"}, {"v": "Y"}, {"v": None}]}
+
+    def test_coalesce_more_than_two_paths(self):
+        data = {"items": [{"a": None, "b": None, "c": "third"}]}
+        spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "a || b || c"}}}}
+        assert process(spec, data) == {"out": {"v": "third"}}
+
+    def test_coalesce_whitespace_around_separator_is_ignored(self):
+        data = {"items": [{"a": None, "b": "ok"}]}
+        for sep in ("a||b", "a || b", "  a  ||  b  "):
+            spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": sep}}}}
+            assert process(spec, data) == {"out": {"v": "ok"}}
+
+    def test_coalesce_empty_segments_are_skipped(self):
+        data = {"items": [{"a": "value"}]}
+        spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "|| a"}}}}
+        assert process(spec, data) == {"out": {"v": "value"}}
+
+    def test_single_path_string_still_works(self):
+        data = {"items": [{"a": 1}]}
+        spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "a"}}}}
+        assert process(spec, data) == {"out": {"v": 1}}

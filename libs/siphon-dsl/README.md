@@ -64,6 +64,7 @@ Output:
 | **Filtering** | `where: {status: "active"}` | Filter by field values |
 | **Ancestor filtering** | `where: {parentId: 123}` | Filter by parent-level properties |
 | **Projection** | `select: {new: "old"}` | Rename and reshape fields |
+| **Coalesce** | `select: {price: "sale \|\| list"}` | First non-null path wins (SQL-style `\|\|`) |
 | **Collect** | `collect: true` | Return all matches (default: first only) |
 | **Reduce** | `reduce: "min_time"` | Aggregate array values to a single result |
 
@@ -83,6 +84,20 @@ extract:
     path: "$.data.items[*]"
     where: {status: "active"}
     select: {item_id: "id", item_name: "name"}
+    collect: true
+```
+
+### Coalesce in `select`
+A `select` path string may contain `||` to declare a fallback chain. Segments are tried left-to-right; the first one resolving to a non-`None` value wins; otherwise the field is `None`. Any number of segments is supported.
+
+```yaml
+extract:
+  products:
+    path: "$.products[*]"
+    select:
+      id: id
+      price: "sale_price || list_price"   # fall back to list_price if sale_price is null
+      label: "customLabel || title || ticketCategory"
     collect: true
 ```
 
@@ -110,7 +125,7 @@ Available operators:
 
 | Operator | Description |
 |---|---|
-| `min_time` / `max_time` | Earliest/latest time-of-day (ignores date + timezone) |
+| `min_time` / `max_time` | Earliest/latest time-of-day — accepts ISO 8601 datetime or plain `HH:MM` / `HH:MM:SS` (ignores date + timezone) |
 | `min_date` / `max_date` | Earliest/latest calendar date (ignores time) |
 | `min_datetime` / `max_datetime` | Earliest/latest full datetime (timezone-normalised) |
 | `min_int` / `max_int` | Minimum/maximum numeric value |
@@ -177,7 +192,7 @@ pip install siphon-dsl[typed]
 
 ## Spec History
 
-See [specs/](specs/) for version history and full documentation. Latest: [v0.8](../../specs/v0.8.md) — adds `reduce` aggregation operators.
+See [specs/](specs/) for version history and full documentation. Latest: [v0.10](../../specs/v0.10.md) — `select` accepts a list of paths for coalesce/fallback.
 
 ## License
 
