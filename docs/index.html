@@ -395,7 +395,7 @@ tr:hover td { background: rgba(108,138,255,0.04); }
       <path d="M8 10h8v2c0 4-2 8-4 10-2-2-4-6-4-10v-2z" stroke="var(--accent)" fill="rgba(108,138,255,0.1)"/>
     </svg>
     Siphon
-    <span class="header-badge">v0.7.0</span>
+    <span class="header-badge">v0.10.0</span>
   </div>
   <div class="header-search">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -424,6 +424,7 @@ tr:hover td { background: rgba(108,138,255,0.04); }
     <a href="#process-api" class="sidebar-link">process()</a>
     <a href="#process-where" class="sidebar-link sub">Filtering</a>
     <a href="#process-select" class="sidebar-link sub">Projection</a>
+    <a href="#process-coalesce" class="sidebar-link sub">Coalesce</a>
     <a href="#process-collect" class="sidebar-link sub">Collect</a>
     <a href="#process-ancestors" class="sidebar-link sub">Ancestor Filtering</a>
     <a href="#process-reduce" class="sidebar-link sub">Reduce</a>
@@ -652,7 +653,7 @@ JSON data    <span class="arrow">--&gt;</span>  Path Resolution          <span c
 <span class="kw">class</span> <span class="fn">FieldSpec</span>:
     path: <span class="fn">str</span>                    <span class="cm"># Required: JSONPath expression</span>
     where: <span class="fn">dict</span> | <span class="num">None</span> = <span class="num">None</span>    <span class="cm"># Optional: filter conditions</span>
-    select: <span class="fn">dict</span> | <span class="num">None</span> = <span class="num">None</span>   <span class="cm"># Optional: field projection/renaming</span>
+    select: <span class="fn">dict</span> | <span class="num">None</span> = <span class="num">None</span>   <span class="cm"># Optional: {output: "path" or "path1 || path2 || ..."}</span>
     collect: <span class="fn">bool</span> = <span class="num">False</span>        <span class="cm"># Optional: return all matches</span>
     reduce: <span class="fn">str</span> | <span class="fn">dict</span> | <span class="num">None</span> = <span class="num">None</span>  <span class="cm"># Optional: aggregate to single value</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
   </div>
@@ -700,6 +701,28 @@ result = process(spec, data)  <span class="cm"># returns dict</span></code><butt
 }
 <span class="cm"># Input:  {"id": 1, "name": "Widget", "pricing": {"amount": 100, "currency": "USD"}}</span>
 <span class="cm"># Output: {"item_id": 1, "item_name": "Widget", "cost": 100, "curr": "USD"}</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+  <h3 id="process-coalesce">Coalesce with <code>||</code> <span class="tag tag-new">v0.10+</span></h3>
+  <p>A <code>select</code> path string can contain <code>||</code> to declare a SQL-style fallback chain. Segments are tried left-to-right; the first one resolving to a non-<code>None</code> value wins; if all are <code>None</code>, the field is <code>None</code>. Any number of segments is supported. Useful for fallback values (e.g. sale price → list price).</p>
+  <pre><code><span class="str">"products"</span>: {
+    <span class="str">"path"</span>: <span class="str">"$.products[*]"</span>,
+    <span class="str">"select"</span>: {
+        <span class="str">"id"</span>: <span class="str">"id"</span>,
+        <span class="str">"price"</span>: <span class="str">"sale_price || list_price"</span>,   <span class="cm"># fall back if sale_price is null</span>
+        <span class="str">"label"</span>: <span class="str">"customLabel || title || ticketCategory"</span>
+    },
+    <span class="str">"collect"</span>: <span class="num">True</span>
+}
+<span class="cm"># Input:  [{"id": 1, "sale_price": 8.0, "list_price": 10.0},</span>
+<span class="cm">#          {"id": 2, "sale_price": null, "list_price": 15.0}]</span>
+<span class="cm"># Output: [{"id": 1, "price": 8.0, ...}, {"id": 2, "price": 15.0, ...}]</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+  <table>
+    <tr><th>All segments resolve</th><th>Result</th></tr>
+    <tr><td>first non-<code>None</code></td><td>that value (stops searching — <code>0</code>, <code>""</code>, <code>False</code> count as non-<code>None</code>)</td></tr>
+    <tr><td>all <code>None</code> / missing</td><td><code>None</code></td></tr>
+    <tr><td>whitespace around <code>||</code></td><td>ignored</td></tr>
+    <tr><td>empty segment (e.g. <code>"|| a"</code>)</td><td>skipped</td></tr>
+  </table>
 
   <h3 id="process-collect">Collecting Results</h3>
   <p>By default, extraction returns the first match. Set <code>collect: true</code> to get all matches.</p>
@@ -759,7 +782,7 @@ result = process(spec, data)  <span class="cm"># returns dict</span></code><butt
 
   <table>
     <tr><th>Operator</th><th>Input type</th><th>Description</th></tr>
-    <tr><td><code>min_time</code> / <code>max_time</code></td><td>ISO 8601 datetime</td><td>Earliest/latest <strong>time-of-day</strong> — ignores date and timezone</td></tr>
+    <tr><td><code>min_time</code> / <code>max_time</code></td><td>ISO 8601 datetime <em>or</em> plain <code>HH:MM</code> / <code>HH:MM:SS</code></td><td>Earliest/latest <strong>time-of-day</strong> — ignores date and timezone <span class="tag tag-new">plain-time support: v0.9+</span></td></tr>
     <tr><td><code>min_date</code> / <code>max_date</code></td><td>ISO 8601 datetime/date</td><td>Earliest/latest <strong>calendar date</strong> — ignores time</td></tr>
     <tr><td><code>min_datetime</code> / <code>max_datetime</code></td><td>ISO 8601 datetime</td><td>Earliest/latest <strong>full datetime</strong>, timezone-normalised</td></tr>
     <tr><td><code>min_int</code> / <code>max_int</code></td><td>number</td><td>Minimum/maximum numeric value (int or float)</td></tr>

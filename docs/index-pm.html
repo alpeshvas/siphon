@@ -766,7 +766,7 @@ mark.search-highlight {
 <section class="hero" id="hero">
   <h1 class="hero-title">Extract what matters<br>from <span class="accent">any JSON API</span></h1>
   <p class="hero-tagline">Siphon is a tiny, declarative toolkit that pulls exactly the data you need from complex API responses -- no custom code required.</p>
-  <span class="badge">v0.7.0 &middot; MIT License</span>
+  <span class="badge">v0.10.0 &middot; MIT License</span>
   <div class="hero-stats">
     <div class="hero-stat">
       <div class="hero-stat-value">0</div>
@@ -933,7 +933,7 @@ mark.search-highlight {
   <div class="feature-panel active" id="tab-process">
     <h3>Simple Extraction</h3>
     <p>The <span class="code-inline">process()</span> API is the quickest way to pull fields from a JSON response. Define paths, optional filters, and optional field renaming -- all in a plain dictionary.</p>
-    <p><strong>When to use it:</strong> You need to grab a few specific fields from an API response, optionally filter an array, or aggregate values (find the minimum, maximum, sum, count, etc.) without writing post-processing code.</p>
+    <p><strong>When to use it:</strong> You need to grab a few specific fields from an API response, optionally filter an array, aggregate values (find the minimum, maximum, sum, count, etc.), or fall back from a primary field to a secondary one when the primary is null -- all without writing post-processing code.</p>
     <div class="before-after">
       <div class="before-after-panel">
         <div class="before-after-label before">Raw API Response</div>
@@ -1249,6 +1249,18 @@ result = pipeline([
       </div>
     </div>
   </div>
+
+  <div class="faq-item">
+    <div class="collapsible">
+      <button class="collapsible-header" onclick="toggleCollapsible(this)">
+        Can I fall back to a second field when the primary one is null? <span class="badge" style="font-size:0.7em;">v0.10+</span>
+        <span class="collapsible-arrow">&#9654;</span>
+      </button>
+      <div class="collapsible-body">
+        <p>Yes -- as of v0.10, a <span class="code-inline">select</span> path string can contain <span class="code-inline">||</span> to declare a fallback chain. Siphon evaluates segments left-to-right and uses the first one that resolves to a non-null value. For example, <span class="code-inline">{"price": "sale_price || list_price"}</span> returns the sale price when it exists and falls back to the list price otherwise. Equivalent to SQL <span class="code-inline">COALESCE</span> -- and you can chain any number of segments.</p>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- ===== GLOSSARY ===== -->
@@ -1278,6 +1290,10 @@ result = pipeline([
     <div class="glossary-item">
       <div class="glossary-term">Collect</div>
       <div class="glossary-def">A flag that controls whether Siphon returns just the first match (default) or all matches as a list.</div>
+    </div>
+    <div class="glossary-item">
+      <div class="glossary-term">Coalesce (Select fallback)</div>
+      <div class="glossary-def">A <span class="code-inline">||</span> separator inside a select path string declares a fallback chain. Segments are evaluated left-to-right; the first one resolving to a non-null value wins; if all are null, the field is null. Example: <span class="code-inline">{"price": "sale_price || list_price"}</span>.</div>
     </div>
     <div class="glossary-item">
       <div class="glossary-term">Reduce</div>

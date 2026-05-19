@@ -28,7 +28,7 @@ Supports (pipeline API v0.7.0+):
 from dataclasses import dataclass
 from typing import Any
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 
 @dataclass
@@ -101,8 +101,28 @@ def matches(item: dict, where: dict) -> bool:
 
 
 def project(item: dict, select: dict) -> dict:
-    """Project/rename fields from item."""
-    return {new_name: get_by_path(item, old_path) for new_name, old_path in select.items()}
+    """Project/rename fields from item.
+
+    A select value is a path string. If the string contains "||", it is
+    treated as a coalesce: paths are tried left-to-right and the first
+    non-None value wins. Whitespace around each segment is ignored;
+    empty segments are skipped.
+    """
+    result = {}
+    for new_name, source in select.items():
+        if "||" in source:
+            value = None
+            for path in source.split("||"):
+                path = path.strip()
+                if not path:
+                    continue
+                value = get_by_path(item, path)
+                if value is not None:
+                    break
+            result[new_name] = value
+        else:
+            result[new_name] = get_by_path(item, source)
+    return result
 
 
 def _time_key(dt_str: str) -> tuple:
