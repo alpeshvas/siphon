@@ -875,3 +875,77 @@ class TestSelectCoalesce:
         data = {"items": [{"a": 1}]}
         spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "a"}}}}
         assert process(spec, data) == {"out": {"v": 1}}
+
+
+class TestPathIndexing:
+    """Paths may use `field[N]` to index into a list at position N (supports negative)."""
+
+    def test_select_indexed_path(self):
+        data = {"items": [{"tieredPrices": [{"amount": 50}, {"amount": 100}]}]}
+        spec = {
+            "extract": {"out": {"path": "$.items[*]", "select": {"v": "tieredPrices[0].amount"}}}
+        }
+        assert process(spec, data) == {"out": {"v": 50}}
+
+    def test_select_indexed_path_second_element(self):
+        data = {"items": [{"tieredPrices": [{"amount": 50}, {"amount": 100}]}]}
+        spec = {
+            "extract": {"out": {"path": "$.items[*]", "select": {"v": "tieredPrices[1].amount"}}}
+        }
+        assert process(spec, data) == {"out": {"v": 100}}
+
+    def test_select_indexed_path_negative(self):
+        data = {"items": [{"tieredPrices": [{"amount": 50}, {"amount": 100}]}]}
+        spec = {
+            "extract": {
+                "out": {
+                    "path": "$.items[*]",
+                    "select": {"v": "tieredPrices[-1].amount"},
+                }
+            }
+        }
+        assert process(spec, data) == {"out": {"v": 100}}
+
+    def test_select_indexed_path_out_of_bounds_returns_none(self):
+        data = {"items": [{"tieredPrices": [{"amount": 50}]}]}
+        spec = {
+            "extract": {"out": {"path": "$.items[*]", "select": {"v": "tieredPrices[5].amount"}}}
+        }
+        assert process(spec, data) == {"out": {"v": None}}
+
+    def test_select_indexed_path_on_missing_field_returns_none(self):
+        data = {"items": [{"other": 1}]}
+        spec = {
+            "extract": {"out": {"path": "$.items[*]", "select": {"v": "tieredPrices[0].amount"}}}
+        }
+        assert process(spec, data) == {"out": {"v": None}}
+
+    def test_select_terminal_index(self):
+        data = {"items": [{"names": ["a", "b", "c"]}]}
+        spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "names[1]"}}}}
+        assert process(spec, data) == {"out": {"v": "b"}}
+
+    def test_select_coalesce_with_indexed_paths(self):
+        tiered = {"tieredPrices": [{"amount": 99}], "price": {"amount": 5}}
+        non_tiered = {"tieredPrices": [], "price": {"amount": 7}}
+        data = {"items": [tiered, non_tiered]}
+        spec = {
+            "extract": {
+                "out": {
+                    "path": "$.items[*]",
+                    "select": {"v": "tieredPrices[0].amount || price.amount"},
+                    "collect": True,
+                }
+            }
+        }
+        assert process(spec, data) == {"out": [{"v": 99}, {"v": 7}]}
+
+    def test_simple_path_extract_with_index(self):
+        data = {"items": [{"id": 1}, {"id": 2}, {"id": 3}]}
+        spec = {"extract": {"second": "$.items[1].id"}}
+        assert process(spec, data) == {"second": 2}
+
+    def test_index_on_non_list_returns_none(self):
+        data = {"items": [{"tieredPrices": {"not": "a list"}}]}
+        spec = {"extract": {"out": {"path": "$.items[*]", "select": {"v": "tieredPrices[0]"}}}}
+        assert process(spec, data) == {"out": {"v": None}}

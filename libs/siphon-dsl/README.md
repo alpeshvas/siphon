@@ -61,6 +61,7 @@ Output:
 |---------|--------|-------------|
 | **Simple paths** | `$.data.id` | Extract nested values |
 | **Array iteration** | `$.items[*].name` | Traverse arrays |
+| **List indexing** | `items[0].id` / `names[-1]` | Pick a specific list position (supports negative) |
 | **Filtering** | `where: {status: "active"}` | Filter by field values |
 | **Ancestor filtering** | `where: {parentId: 123}` | Filter by parent-level properties |
 | **Projection** | `select: {new: "old"}` | Rename and reshape fields |
@@ -86,6 +87,22 @@ extract:
     select: {item_id: "id", item_name: "name"}
     collect: true
 ```
+
+### List indexing (`[N]`)
+Any path segment can drill into a list at a specific position with `[N]`. Negative indices count from the end; out-of-bounds or non-list values resolve to `None`. Indexing composes with `||`:
+
+```yaml
+extract:
+  rows:
+    path: "$.items[*]"
+    select:
+      # Try the first tier, fall back to a flat price field
+      amount: "tieredPrices[0].amount || price.amount"
+      last_name: "names[-1]"
+    collect: true
+```
+
+`[*]` and `[N]` are distinct — `[*]` iterates, `[N]` picks one element.
 
 ### Coalesce in `select`
 A `select` path string may contain `||` to declare a fallback chain. Segments are tried left-to-right; the first one resolving to a non-`None` value wins; otherwise the field is `None`. Any number of segments is supported.
@@ -192,7 +209,7 @@ pip install siphon-dsl[typed]
 
 ## Spec History
 
-See [specs/](specs/) for version history and full documentation. Latest: [v0.10](../../specs/v0.10.md) — `select` accepts a list of paths for coalesce/fallback.
+See [specs/](specs/) for version history and full documentation. Latest: [v0.11](../../specs/v0.11.md) — paths support `[N]` list indexing (positive and negative).
 
 ## License
 

@@ -395,7 +395,7 @@ tr:hover td { background: rgba(108,138,255,0.04); }
       <path d="M8 10h8v2c0 4-2 8-4 10-2-2-4-6-4-10v-2z" stroke="var(--accent)" fill="rgba(108,138,255,0.1)"/>
     </svg>
     Siphon
-    <span class="header-badge">v0.10.0</span>
+    <span class="header-badge">v0.11.0</span>
   </div>
   <div class="header-search">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -425,6 +425,7 @@ tr:hover td { background: rgba(108,138,255,0.04); }
     <a href="#process-where" class="sidebar-link sub">Filtering</a>
     <a href="#process-select" class="sidebar-link sub">Projection</a>
     <a href="#process-coalesce" class="sidebar-link sub">Coalesce</a>
+    <a href="#process-indexing" class="sidebar-link sub">List indexing</a>
     <a href="#process-collect" class="sidebar-link sub">Collect</a>
     <a href="#process-ancestors" class="sidebar-link sub">Ancestor Filtering</a>
     <a href="#process-reduce" class="sidebar-link sub">Reduce</a>
@@ -723,6 +724,27 @@ result = process(spec, data)  <span class="cm"># returns dict</span></code><butt
     <tr><td>whitespace around <code>||</code></td><td>ignored</td></tr>
     <tr><td>empty segment (e.g. <code>"|| a"</code>)</td><td>skipped</td></tr>
   </table>
+
+  <h3 id="process-indexing">List indexing with <code>[N]</code> <span class="tag tag-new">v0.11+</span></h3>
+  <p>Any path segment can drill into a list at a specific position using <code>[N]</code>. Negative indices count from the end. Out-of-bounds, missing keys, or indexing into a non-list value resolve to <code>None</code>. Indexing composes with <code>||</code>, so a single <code>select</code> expression can target both tiered and flat shapes.</p>
+  <pre><code><span class="str">"rows"</span>: {
+    <span class="str">"path"</span>: <span class="str">"$.items[*]"</span>,
+    <span class="str">"select"</span>: {
+        <span class="cm"># Try first tier; fall back to flat price</span>
+        <span class="str">"amount"</span>: <span class="str">"tieredPrices[0].amount || price.amount"</span>,
+        <span class="str">"last"</span>:   <span class="str">"names[-1]"</span>
+    },
+    <span class="str">"collect"</span>: <span class="num">True</span>
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+  <table>
+    <tr><th>Form</th><th>Meaning</th></tr>
+    <tr><td><code>items[0]</code></td><td>First element</td></tr>
+    <tr><td><code>items[-1]</code></td><td>Last element</td></tr>
+    <tr><td><code>matrix[0][1]</code></td><td>Chained indices</td></tr>
+    <tr><td><code>a.b[2].c</code></td><td>Mixed dots and indices</td></tr>
+    <tr><td>Out of bounds / non-list / missing</td><td><code>None</code></td></tr>
+  </table>
+  <p><strong>Note:</strong> <code>[*]</code> (iterate every element) and <code>[N]</code> (pick one element) are distinct constructs.</p>
 
   <h3 id="process-collect">Collecting Results</h3>
   <p>By default, extraction returns the first match. Set <code>collect: true</code> to get all matches.</p>
