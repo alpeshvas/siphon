@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 
 @dataclass
@@ -132,13 +132,23 @@ def matches(item: dict, where: dict) -> bool:
 def project(item: dict, select: dict) -> dict:
     """Project/rename fields from item.
 
-    A select value is a path string. If the string contains "||", it is
-    treated as a coalesce: paths are tried left-to-right and the first
-    non-None value wins. Whitespace around each segment is ignored;
-    empty segments are skipped.
+    A select value is either:
+    - a path string (resolved against `item` via dot/`[N]` traversal);
+      if the string contains "||", it is treated as a coalesce: paths
+      are tried left-to-right and the first non-None value wins.
+      Whitespace around each segment is ignored; empty segments are skipped.
+    - a literal-value marker dict `{"$literal": <any>}` — used as-is
+      without path resolution. Produced by pipeline `$stages.X.Y` refs
+      that resolve in `select` values.
     """
     result = {}
     for new_name, source in select.items():
+        if isinstance(source, dict) and "$literal" in source:
+            result[new_name] = source["$literal"]
+            continue
+        if not isinstance(source, str):
+            result[new_name] = None
+            continue
         if "||" in source:
             value = None
             for path in source.split("||"):
