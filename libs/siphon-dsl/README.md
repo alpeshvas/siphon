@@ -62,6 +62,8 @@ Output:
 | **Simple paths** | `$.data.id` | Extract nested values |
 | **Array iteration** | `$.items[*].name` | Traverse arrays |
 | **List indexing** | `items[0].id` / `names[-1]` | Pick a specific list position (supports negative) |
+| **Root capture** | `from: "$"` | Iterate root once — lets a pipeline stage project top-level scalars |
+| **Pipeline `$stages` in `select`** | `select: {x: "$stages.act.y"}` | Carry a prior stage's value as a literal into the current stage's projection |
 | **Filtering** | `where: {status: "active"}` | Filter by field values |
 | **Ancestor filtering** | `where: {parentId: 123}` | Filter by parent-level properties |
 | **Projection** | `select: {new: "old"}` | Rename and reshape fields |
@@ -209,7 +211,7 @@ pip install siphon-dsl[typed]
 
 ## Spec History
 
-See [specs/](specs/) for version history and full documentation. Latest: [v0.11](../../specs/v0.11.md) — paths support `[N]` list indexing (positive and negative).
+See [specs/](specs/) for version history and full documentation. Latest: [v0.12](../../specs/v0.12.md) — pipeline stages can capture root scalars via `from: "$"` and reference prior stages from `select` via `$stages.<id>.<field>`.
 
 ## License
 

@@ -147,10 +147,17 @@ def resolve_from(from_path: str | None, data: Any) -> list:
     If from_path starts with "$.", it's an absolute path from root.
     Otherwise, it's a relative path on data.
 
+    The lone path `"$"` is special: it yields `data` itself as a single-item
+    iteration when `data` is not a list. This lets a pipeline stage capture
+    root-level scalars by iterating the root document once.
+
     Returns a list (empty if path doesn't resolve to a list).
     """
     if not from_path:
         return data if isinstance(data, list) else []
+
+    if from_path == "$":
+        return data if isinstance(data, list) else [data]
 
     # Strip leading "$." if present (absolute path)
     if from_path.startswith("$."):
@@ -355,6 +362,26 @@ def resolve_refs(obj: Any, ctx: dict[str, Any]) -> Any:
     return obj
 
 
+def resolve_select_refs(select: Any, ctx: dict[str, Any]) -> Any:
+    """Resolve $stages.X.Y references in a select dict.
+
+    Unlike `resolve_refs` (used for `where`), select values are path strings
+    that get evaluated against each iterated item. A `$stages.X.Y` reference
+    must be substituted with the resolved value as a LITERAL — not as another
+    path to traverse on the item. We wrap resolved values in a
+    `{"$literal": value}` marker that `project()` honors.
+    """
+    if not ctx or not isinstance(select, dict):
+        return select
+    out = {}
+    for k, v in select.items():
+        if isinstance(v, str) and v.startswith("$stages."):
+            out[k] = {"$literal": resolve_ref(v, ctx)}
+        else:
+            out[k] = v
+    return out
+
+
 def pipeline(stages: list[dict[str, Any]], data: Any) -> list | dict | None:
     """
     Execute a sequence of named stages, GitHub Actions-style.
@@ -375,11 +402,14 @@ def pipeline(stages: list[dict[str, Any]], data: Any) -> list | dict | None:
     for stage in stages:
         stage_id = stage.get("id")
 
-        # Build resolved stage: resolve $stages refs in where, strip id
+        # Build resolved stage: resolve $stages refs in where + select, strip id
         resolved_where = resolve_refs(stage.get("where"), stages_context)
+        resolved_select = resolve_select_refs(stage.get("select"), stages_context)
         resolved_stage = {k: v for k, v in stage.items() if k != "id"}
         if resolved_where is not None:
             resolved_stage["where"] = resolved_where
+        if resolved_select is not None:
+            resolved_stage["select"] = resolved_select
 
         # Delegate to query() (handles decompose_multi_star + execute_chain)
         result = query(resolved_stage, data)

@@ -655,3 +655,115 @@ class TestBokunActivityPipeline:
             {"label": "Express Cooking Class", "hour": 14, "minute": 30},
             {"label": "English PM Express Class", "hour": 18, "minute": 0},
         ]
+
+
+class TestRootCaptureStage:
+    """v0.12: `from: '$'` lets a stage iterate the root document once, capturing root scalars."""
+
+    def test_root_capture_via_dollar_from(self, sibling_data):
+        result = pipeline(
+            [
+                {
+                    "id": "root",
+                    "from": "$",
+                    "select": {"rate_count": "rates"},  # value will be the rates list
+                },
+            ],
+            sibling_data,
+        )
+        # Single root iteration -> first item returned (collect not set)
+        assert isinstance(result, dict)
+        assert isinstance(result["rate_count"], list)
+        assert len(result["rate_count"]) == 2
+
+    def test_root_capture_projects_scalars(self):
+        data = {"a": 1, "b": "x", "c": True, "nested": {"v": 9}}
+        result = pipeline(
+            [
+                {
+                    "id": "root",
+                    "from": "$",
+                    "select": {"a": "a", "b": "b", "c": "c", "v": "nested.v"},
+                },
+            ],
+            data,
+        )
+        assert result == {"a": 1, "b": "x", "c": True, "v": 9}
+
+
+class TestStagesRefsInSelect:
+    """v0.12: `$stages.<id>.<field>` references resolve in `select` values too,
+    not just in `where`. Resolved values are carried as literals."""
+
+    def test_select_ref_carries_literal_from_prior_stage(self, sibling_data):
+        result = pipeline(
+            [
+                {"id": "rate", "from": "$.rates[*]", "where": {"id": 1},
+                 "select": {"firstStartTimeId": "startTimeIds[0]", "rateTitle": "title"}},
+                {"from": "$.startTimes[*]",
+                 "where": {"id": "$stages.rate.firstStartTimeId"},
+                 "select": {
+                     "hour": "hour",
+                     "rateTitle": "$stages.rate.rateTitle",
+                 }},
+            ],
+            sibling_data,
+        )
+        assert result == {"hour": 9, "rateTitle": "Standard"}
+
+    def test_select_ref_combines_root_and_joined_fields(self):
+        """End-to-end: stage 1 captures root scalars via `from: '$'`, stage 3
+        joins a sub-array and combines root scalars + joined fields in one dict."""
+        data = {
+            "bookingType": "DATE_AND_TIME",
+            "bookingCutoffHours": 24,
+            "rates": [{"id": 1, "startTimeIds": [10]}],
+            "startTimes": [{"id": 10, "hour": 9, "minute": 0, "duration": 4}],
+        }
+        result = pipeline(
+            [
+                {"id": "act", "from": "$",
+                 "select": {
+                     "bookingType": "bookingType",
+                     "bookingCutoffHours": "bookingCutoffHours",
+                 }},
+                {"id": "rate", "from": "$.rates[*]",
+                 "select": {"firstStartTimeId": "startTimeIds[0]"}},
+                {"from": "$.startTimes[*]",
+                 "where": {"id": "$stages.rate.firstStartTimeId"},
+                 "select": {
+                     "hour": "hour", "minute": "minute", "duration": "duration",
+                     "bookingType": "$stages.act.bookingType",
+                     "bookingCutoffHours": "$stages.act.bookingCutoffHours",
+                 }},
+            ],
+            data,
+        )
+        assert result == {
+            "hour": 9, "minute": 0, "duration": 4,
+            "bookingType": "DATE_AND_TIME", "bookingCutoffHours": 24,
+        }
+
+    def test_select_ref_resolved_to_none_when_prior_stage_empty(self):
+        data = {"rates": [], "startTimes": [{"id": 1, "hour": 7}]}
+        result = pipeline(
+            [
+                {"id": "rate", "from": "$.rates[*]", "select": {"v": "id"}},
+                {"from": "$.startTimes[*]",
+                 "where": {"id": 1},
+                 "select": {"hour": "hour", "rateId": "$stages.rate.v"}},
+            ],
+            data,
+        )
+        assert result == {"hour": 7, "rateId": None}
+
+    def test_select_without_stage_ref_still_works(self, sibling_data):
+        """Regression: non-$stages select strings remain plain path projections."""
+        result = pipeline(
+            [
+                {"from": "$.rates[*]", "where": {"id": 1},
+                 "select": {"title": "title", "first_st": "startTimeIds[0]"}},
+            ],
+            sibling_data,
+        )
+        assert result == {"title": "Standard", "first_st": 10}
