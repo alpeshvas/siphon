@@ -25,10 +25,11 @@ Supports (pipeline API v0.7.0+):
 - Each stage's `from` resolves against root data
 """
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 
 @dataclass
@@ -52,12 +53,40 @@ def parse_field(value) -> FieldSpec:
     )
 
 
+_INDEX_RE = re.compile(r"\[(-?\d+)\]")
+
+
 def get_by_path(obj, path: str):
-    """Traverse dot notation path."""
+    """Traverse dot notation path, with optional `[N]` list indexing.
+
+    Each dot-separated part may end with one or more `[N]` segments to index
+    into a list (negative indices allowed). Out-of-bounds indices, missing
+    keys, or indexing into a non-list yield None.
+
+    Examples: `a.b.c`, `items[0].id`, `matrix[0][1]`, `names[-1]`.
+    """
     for part in path.split("."):
         if obj is None:
             return None
-        obj = obj.get(part) if isinstance(obj, dict) else None
+        m = _INDEX_RE.search(part)
+        if m:
+            base = part[: m.start()]
+            indices = [int(i) for i in _INDEX_RE.findall(part)]
+        else:
+            base = part
+            indices = []
+        if base:
+            obj = obj.get(base) if isinstance(obj, dict) else None
+        for idx in indices:
+            if obj is None:
+                break
+            if isinstance(obj, list):
+                try:
+                    obj = obj[idx]
+                except IndexError:
+                    obj = None
+            else:
+                obj = None
     return obj
 
 
